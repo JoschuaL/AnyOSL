@@ -1,0 +1,10 @@
+#include "stdosl.h"
+
+shader SimpleMaterial(
+    color diffuse_color = color(0.6, 0.8, 0.6),
+    float noise_factor = 0.5,
+    output closure color bsdf = diffuse(N))
+{
+   color material_color = diffuse_color * mix(1.0, noise(P * 10.0), noise_factor);
+   bsdf = material_color * diffuse(N);
+}
