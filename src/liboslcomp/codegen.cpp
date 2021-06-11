@@ -7,6 +7,8 @@
 #include <vector>
 
 #include "oslcomp_pvt.h"
+#include "ast.h"
+
 
 #include <OpenImageIO/strutil.h>
 namespace Strutil = OIIO::Strutil;
@@ -343,6 +345,19 @@ ASTNode::codegen_list(ref node, Symbol* dest)
     return sym;
 }
 
+Symbol*
+ASTNode::codegen_list_artic(ASTNode::ref node, Symbol* dest)
+{
+    Symbol* sym = NULL;
+    while (node) {
+        bool last = (node->nextptr() == NULL);
+        sym       = node->codegen_artic(last ? dest : NULL);
+        std::cout << ";" << std::endl;
+        node      = node->next();
+    }
+    return sym;
+}
+
 
 
 Symbol*
@@ -370,7 +385,6 @@ ASTNode::codegen_int(Symbol*, bool boolify, bool invert)
 }
 
 
-
 Symbol*
 ASTshader_declaration::codegen(Symbol*)
 {
@@ -381,12 +395,78 @@ ASTshader_declaration::codegen(Symbol*)
         // If the initializer is a literal and we output it as a
         // constant in the symbol definition, no need for ops.
         std::string out;
-        if (!v->param_default_literals(v->sym(), v->init().get(), out))
+        if (!v->param_default_literals(v->sym(), v->init().get(), out)) {
             v->codegen();
+        }
     }
 
     m_compiler->codegen_method(m_compiler->main_method_name());
     codegen_list(statements());
+    return NULL;
+}
+
+Symbol*
+ASTshader_declaration::codegen_artic(Symbol*)
+{
+    auto name = this->shadername();
+
+
+
+    std::cout << "struct " << name << "_in {" << std::endl;
+    //NOT_IMPLEMENTED;
+
+    std::vector<ref> outputs = {};
+    for (ref f = formals(); f; f = f->next()) {
+        OSL_DASSERT(f->nodetype() == ASTNode::variable_declaration_node);
+        ASTvariable_declaration* v = (ASTvariable_declaration*)f.get();
+        if (v->is_output()) {
+            outputs.push_back(f);
+            continue;
+        }
+
+        OSL_DASSERT(v->init());  // Shader formals MUST have initializers
+        // If the initializer is a literal and we output it as a
+        // constant in the symbol definition, no need for ops.
+
+        TypeSpec t = v->typespec();
+        std::cout << t.artic_string() << " " << v->name() << " = ";
+        std::string out;
+        if (!v->param_default_literals_artic(v->sym(), v->init().get(), out, ",")) {
+            v->codegen_artic();
+        }
+        std::cout << "," << std::endl;
+    }
+
+    std::cout << "}" << std::endl
+              << std::endl
+              << "struct " << name << "_out {" << std::endl;
+    for (auto&& f : outputs) {
+        OSL_DASSERT(f->nodetype() == ASTNode::variable_declaration_node);
+        ASTvariable_declaration* v = (ASTvariable_declaration*)f.get();
+        OSL_DASSERT(v->init());  // Shader formals MUST have initializers
+        // If the initializer is a literal and we output it as a
+        // constant in the symbol definition, no need for ops.
+
+        TypeSpec t = v->typespec();
+        std::cout << t.artic_string() << " " << v->name() << " = ";
+        std::string out;
+        if (!v->param_default_literals_artic(v->sym(), v->init().get(), out)) {
+            v->codegen_artic();
+        }
+        std::cout << "," << std::endl;
+    }
+
+    std::cout << "}" << std::endl << std::endl;
+
+    std::cout << "fn " << name << "_impl(in: " << name << "_in, out: " << name
+              << "_out) {" << std::endl;
+
+    m_compiler->codegen_method(m_compiler->main_method_name());
+    codegen_list_artic(statements());
+    std::cout << "out" << std::endl;
+
+
+    std::cout << "}" << std::endl;
     return NULL;
 }
 
@@ -528,6 +608,81 @@ ASTassign_expression::codegen(Symbol* dest)
 
     if (index) {
         index->codegen_assign(operand);
+        dest = operand;  // so transitive assignment works for array refs
+    } else if (operand != dest) {
+        emitcode(typespec().is_array() ? "arraycopy" : "assign", dest, operand);
+    }
+    return dest;
+}
+
+Symbol* ASTassign_expression::codegen_artic(Symbol *dest){
+
+    OSL_DASSERT(m_op == Assign);  // all else handled by binary_op
+
+    ASTindex* index = NULL;
+    if (var()->nodetype() == index_node) {
+        NOT_IMPLEMENTED;
+        // Assigning to an individual component or array element
+        index = (ASTindex*)var().get();
+        dest  = NULL;
+    } else if (var()->nodetype() == structselect_node) {
+        NOT_IMPLEMENTED;
+        if (!((ASTstructselect*)var().get())->compindex())
+            dest = var()->codegen_artic();
+        // ^^ N.B. don't do the extra codegen of the destination if this
+        // is the kind of structselect that is really an assignment to a
+        // named component (P.x = ...).
+    } else {
+        dest = var()->codegen_artic();
+    }
+    std::cout << " = ";
+    Symbol* operand = expr()->codegen_artic(dest);
+        OSL_DASSERT(operand != NULL);
+
+    if (typespec().is_structure_array()) {
+        // Assign entire array-of-struct to another array-of-struct
+        if (operand != dest) {
+            StructSpec* structspec = typespec().structspec();
+            codegen_assign_struct_artic(structspec, ustring(dest->mangled()),
+                                  ustring(operand->mangled()), NULL, true, 0,
+                                  false /*not a shader param init*/);
+        }
+        return dest;
+    }
+
+    if (typespec().is_structure()) {
+        // Assignment of struct copies each element individually
+        if (operand != dest) {
+            StructSpec* structspec = typespec().structspec();
+            Symbol* arrayindex     = index ? index->index()->codegen_artic() : NULL;
+            if (arrayindex) {
+                // Special case -- assignment to a element of an array of
+                // structs.  Beware the temp that may have been created above,
+                // instead refer back to the original.
+                Symbol* v = index->lvalue()->codegen_artic();
+                codegen_assign_struct_artic(structspec, ustring(v->mangled()),
+                                      ustring(operand->mangled()), arrayindex,
+                                      false, -1 /* means we don't know */,
+                                      false /*not a shader param init*/);
+            } else {
+                // Assignment of one scalar struct to another scalar struct
+                    OSL_DASSERT(dest);
+                codegen_assign_struct_artic(structspec, ustring(dest->mangled()),
+                                      ustring(operand->mangled()), NULL, true,
+                                      0, false /*not a shader param init*/);
+            }
+        }
+        return dest;
+    }
+
+    if (var()->nodetype() == structselect_node) {
+        ASTstructselect* ss = (ASTstructselect*)var().get();
+        ss->codegen_assign_artic(dest, operand);
+        return dest;
+    }
+
+    if (index) {
+        index->codegen_assign_artic(operand);
         dest = operand;  // so transitive assignment works for array refs
     } else if (operand != dest) {
         emitcode(typespec().is_array() ? "arraycopy" : "assign", dest, operand);
@@ -755,6 +910,177 @@ ASTNode::one_default_literal(const Symbol* sym, ASTNode* init, std::string& out,
     return completed;
 }
 
+bool
+ASTNode::one_default_literal_artic(const Symbol* sym, ASTNode* init,
+                                   std::string& out, string_view sep) const
+{
+    // FIXME -- this only works for single values or arrays made of
+    // literals.  Needs to be seriously beefed up.
+    bool islit      = init && init->nodetype() == ASTNode::literal_node;
+    ASTliteral* lit = static_cast<ASTliteral*>(init);
+    bool completed  = true;  // have we output the full initialization?
+    TypeSpec type   = sym->typespec().elementtype();
+    if (type.is_closure()) {
+        // this clause avoid trouble and assertions if the following
+        // is_int(), i_float(), etc, encounter a closure.
+        completed = islit;
+    } else if (type.is_structure()) {
+        // No initializers for struct
+        completed = false;
+    } else if (type.is_int()) {
+        NOT_IMPLEMENTED;
+        if (islit && lit->typespec().is_int())
+            out += Strutil::sprintf("%d", lit->intval());
+        else {
+            out += "0";  // FIXME?
+            completed = false;
+        }
+    } else if (type.is_float()) {
+        if (islit && lit->typespec().is_int()){
+            std::cout << std::to_string(lit->intval());
+            out += Strutil::sprintf("%d", lit->intval());}
+        else if (islit && lit->typespec().is_float()){
+            std::cout << std::to_string(lit->floatval());
+            out += Strutil::sprintf("%.9g", lit->floatval());}
+        else {
+            std::cout << "0";
+            out += "0";  // FIXME?
+            completed = false;
+        }
+    } else if (type.is_triple()) {
+        if (type.is_point()) {
+            std::cout << "Point<";
+        } else if (type.is_color()) {
+            std::cout << "Color<";
+        } else if (type.is_normal()) {
+            std::cout << "Normal<";
+        } else {
+            std::cout << "Vector<";
+        }
+
+        if (islit && lit->typespec().is_int()) {
+            std::string sign = lit->typespec().simpletype().is_signed() ? "i"
+                                                                        : "u";
+            std::cout << sign << "32>{";
+            float f = lit->intval();
+            std::cout << f << sep << f << sep << f << "}";
+            out += Strutil::sprintf("%.9g%s%.9g%s%.9g", f, sep, f, sep, f);
+        } else if (islit && lit->typespec().is_float()) {
+            float f = lit->floatval();
+            std::cout << "f32>{" << f << sep << f << sep << f << "}";
+            out += Strutil::sprintf("%.9g%s%.9g%s%.9g", f, sep, f, sep, f);
+        } else if (init && init->typespec() == type
+                   && (init->nodetype() == ASTNode::type_constructor_node
+                       || (init->nodetype() == ASTNode::compound_initializer_node
+                           && static_cast<ASTcompound_initializer*>(init)
+                                  ->canconstruct()))) {
+            ASTtype_constructor* ctr = (ASTtype_constructor*)init;
+            ASTNode::ref val         = ctr->args();
+            float f[3];
+            int nargs = 0;
+            if (val.get() && val->nodetype() == ASTNode::literal_node
+                && val->typespec().is_string()) {  // "space" name case
+                val       = val->next();
+                completed = false;
+            }
+            bool one_arg = (val && !val->nextptr());
+            for (int c = 0; c < 3; ++c) {
+                if (val.get())
+                    ++nargs;
+                if (val.get() && val->nodetype() == ASTNode::literal_node) {
+                    f[c] = ((ASTliteral*)val.get())->floatval();
+                    val  = val->next();
+                } else if (c > 0 && one_arg) {
+                    f[c] = f[0];
+                } else {
+                    f[c]      = 0;
+                    completed = false;
+                }
+            }
+            if (nargs == 1) {
+                std::cout << "f32>{" << f[0] << sep << f[0] << sep << f[0]
+                          << "}";
+                out += Strutil::sprintf("%.9g%s%.9g%s%.9g", f[0], sep, f[0],
+                                        sep, f[0]);
+            } else {
+                std::cout << "f32>{" << f[0] << sep << f[1] << sep << f[2]
+                          << "}";
+                out += Strutil::sprintf("%.9g%s%.9g%s%.9g", f[0], sep, f[1],
+                                        sep, f[2]);
+            }
+        } else {
+            std::cout << "f32>{" << "0" << sep << "0" << sep << "0"
+                      << "}";
+            out += Strutil::sprintf("0%s0%s0", sep, sep);
+            completed = false;
+        }
+    } else if (type.is_matrix()) {
+        NOT_IMPLEMENTED;
+        if (islit && lit->typespec().is_int()) {
+            float f = lit->intval();
+            for (int c = 0; c < 16; ++c)
+                out += Strutil::sprintf("%.9g%s", (c / 4) == (c % 4) ? f : 0.0f,
+                                        c < 15 ? sep.c_str() : "");
+        } else if (islit && lit->typespec().is_float()) {
+            float f = lit->floatval();
+            for (int c = 0; c < 16; ++c)
+                out += Strutil::sprintf("%.9g%s", (c / 4) == (c % 4) ? f : 0.0f,
+                                        c < 15 ? sep.c_str() : "");
+        } else if (init && init->typespec() == type
+                   && init->nodetype() == ASTNode::type_constructor_node) {
+            ASTtype_constructor* ctr = (ASTtype_constructor*)init;
+            ASTNode::ref val         = ctr->args();
+            float f[16];
+            int nargs = 0;
+            OSL_DASSERT(val.get());
+            if (val->nodetype() == ASTNode::literal_node
+                && val->typespec().is_string()) {
+                val       = val->next();
+                completed = false;
+            }
+            for (int c = 0; c < 16; ++c) {
+                if (val.get())
+                    ++nargs;
+                if (val.get() && val->nodetype() == ASTNode::literal_node) {
+                    f[c] = ((ASTliteral*)val.get())->floatval();
+                    val  = val->next();
+                    if (!val.get())  // we're done -- no more args
+                        break;
+                } else {
+                    f[c]      = 0;
+                    completed = false;
+                }
+            }
+            if (nargs == 1) {
+                for (int c = 0; c < 16; ++c)
+                    out += Strutil::sprintf("%.9g%s",
+                                            (c / 4) == (c % 4) ? f[0] : 0.0f,
+                                            c < 15 ? sep.c_str() : "");
+            } else {
+                for (int c = 0; c < 16; ++c)
+                    out += Strutil::sprintf("%.9g%s", f[c],
+                                            c < 15 ? sep.c_str() : "");
+            }
+        } else {
+            for (int c = 0; c < 16; ++c)
+                out += Strutil::sprintf("0%s", c < 15 ? sep.c_str() : "");
+            completed = false;
+        }
+    } else if (type.is_string()) {
+        NOT_IMPLEMENTED;
+        if (islit && lit->typespec().is_string())
+            out += Strutil::sprintf("\"%s\"",
+                                    Strutil::escape_chars(lit->strval()));
+        else {
+            out += "\"\"";  // FIXME?
+            completed = false;
+        }
+    } else {
+        OSL_ASSERT(0 && "help with initializer");
+    }
+    return completed;
+}
+
 
 
 bool
@@ -803,6 +1129,52 @@ ASTvariable_declaration::param_default_literals(const Symbol* sym,
     return completed;
 }
 
+bool
+ASTvariable_declaration::param_default_literals_artic(
+    const Symbol* sym, ASTNode* init, std::string& out,
+    string_view separator) const
+{
+    out.clear();
+
+    if (sym->typespec().is_structure()
+        || sym->typespec().is_structure_array()) {
+        // Structures are just placeholders, they don't get initialized.
+        // The defaults will get associated with their individual member
+        // fields.
+        return false;
+    }
+
+    if (sym->fieldid() >= 0) {
+        // A structure field has already had its individual init stashed in
+        // the node that defined its parameter (i.e., *this). Look in that
+        // list for the initializer for this specific field.
+        init = NULL;
+        for (auto&& n : m_struct_field_inits) {
+            if (n.first == sym->name()) {
+                init = n.second;
+                break;
+            }
+        }
+    }
+
+    bool compound = (init && init->nodetype() == compound_initializer_node);
+    if (compound) {
+        compound = !static_cast<ASTcompound_initializer*>(init)->canconstruct();
+        if (compound)
+            init = ((ASTcompound_initializer*)init)->initlist().get();
+    }
+
+    bool completed = true;  // have we output the full initialization?
+    for (int i = 0; i == 0 || init; ++i, init = init->nextptr()) {
+        if (i)
+            out += separator;
+        completed &= one_default_literal_artic(sym, init, out, separator);
+        if (!compound || !init)
+            break;
+    }
+    return completed;
+}
+
 
 
 Symbol*
@@ -810,6 +1182,19 @@ ASTvariable_declaration::codegen(Symbol* /*dst*/)
 {
     if (init())
         codegen_initializer(init(), m_sym);
+    return m_sym;
+}
+
+Symbol*
+ASTvariable_declaration::codegen_artic(Symbol* dest)
+{
+    if(!is_parameter()){
+        std::cout << "let " << this->name().string() << " = ";
+    }
+
+    if (init()){
+        codegen_initializer_artic(init(), m_sym);
+    }
     return m_sym;
 }
 
@@ -855,6 +1240,51 @@ ASTvariable_declaration::codegen_initializer(ref init, Symbol* sym)
         codegen_initlist(init, m_typespec, m_sym);
     }
 }
+void
+ASTvariable_declaration::codegen_initializer_artic(ASTNode::ref init,
+                                                   Symbol* sym)
+{
+    if (typespec().is_structure()) {
+        NOT_IMPLEMENTED;
+        codegen_struct_initializers(init, sym);
+    } else if (typespec().is_array()) {
+        NOT_IMPLEMENTED;
+            OSL_DASSERT(init->nodetype() == compound_initializer_node);
+        init = ((ASTcompound_initializer*)init.get())->initlist();
+        codegen_initlist(init, typespec(), sym);
+    } else {
+        if (init->nodetype() == compound_initializer_node) {
+            NOT_IMPLEMENTED;
+            ASTcompound_initializer* cinit
+                = static_cast<ASTcompound_initializer*>(init.get());
+            init = cinit->initlist();
+            if (cinit->canconstruct()) {
+                bool paraminit
+                    = (m_compiler->codegen_method()
+                       != m_compiler->main_method_name()
+                       && (m_sym->symtype() == SymTypeParam
+                           || m_sym->symtype() == SymTypeOutputParam));
+                if (paraminit) {
+                    // For parameter initialization, don't really generate ops if it
+                    // can be statically initialized.
+                    m_compiler->codegen_method(sym->name());
+                    sym->initbegin(m_compiler->next_op_label());
+                }
+
+                Symbol* dest = cinit->codegen(sym);
+                if (dest != sym)
+                    emitcode("assign", sym, dest);
+
+                if (paraminit)
+                    sym->initend(m_compiler->next_op_label());
+                return;
+            }
+        }
+        codegen_initlist_artic(init, m_typespec, m_sym);
+    }
+
+}
+
 
 
 Symbol*
@@ -1037,6 +1467,184 @@ ASTNode::codegen_initlist(ref init, TypeSpec type, Symbol* sym)
         sym->initend(m_compiler->next_op_label());
 }
 
+void
+ASTNode::codegen_initlist_artic(ASTNode::ref init, TypeSpec type, Symbol* sym)
+{
+    // If we're doing this initialization for shader params for their
+    // init ops, we need to take care to set the codegen method names
+    // properly.
+    bool paraminit = (m_compiler->codegen_method()
+                      != m_compiler->main_method_name()
+                      && (sym->symtype() == SymTypeParam
+                          || sym->symtype() == SymTypeOutputParam));
+
+    if (type.is_structure()) {
+        NOT_IMPLEMENTED;
+        // Special case -- structure : Recurse to handle each field
+        // individually.
+        StructSpec* structspec(type.structspec());
+        for (int i = 0; init && i < structspec->numfields();
+             init  = init->next(), ++i) {
+            const StructSpec::FieldSpec& field(structspec->field(i));
+            ustring fieldname = ustring::sprintf("%s.%s", sym->mangled(),
+                                                 field.name);
+            Symbol* fieldsym  = m_compiler->symtab().find_exact(fieldname);
+            if (paraminit) {
+                    OSL_DASSERT(nodetype() == variable_declaration_node);
+                ASTvariable_declaration* v = (ASTvariable_declaration*)this;
+                std::string out;
+                if (v->param_default_literals(fieldsym, init.get(), out))
+                    continue;  // Skip if we had a static initializer
+            }
+            codegen_initlist(init, fieldsym->typespec(), fieldsym);
+        }
+        return;
+    }
+
+    if (paraminit) {
+
+        // Warn early about struct array paramters.
+        // Handling this will likely need changes to oso format.
+        if (type.is_structure_array()) {
+            errorf("array of struct are not allowed as parameters");
+            return;
+        }
+        // For parameter initialization, don't really generate ops if it
+        // can be statically initialized.
+        m_compiler->codegen_method(sym->name());
+        sym->initbegin(m_compiler->next_op_label());
+        //NOT_IMPLEMENTED;
+    }
+
+    // Special case for arrays initialized by only constants of the
+    // right type.
+        OSL_DASSERT(sym->typespec() == type);
+    if (type.is_array() && !type.is_closure_based()
+        && !type.is_structure_array()) {
+        NOT_IMPLEMENTED;
+        TypeDesc elemtype = type.simpletype().elementtype();
+        bool all_const    = true;
+        int length        = 0;
+        for (ref i = init; i; i = i->next(), ++length) {
+            NOT_IMPLEMENTED;
+            // It's not a constant if the initializer isn't a literal
+            if (i->nodetype() != ASTNode::literal_node) {
+                all_const = false;
+                break;
+            }
+            // Also check that the initializer type is equivalent to the
+            // element type of the array, but allow for float arrays with
+            // int literal initializers.
+            TypeDesc itype = i->typespec().simpletype();
+            if (itype != elemtype
+                && !(itype == TypeDesc::INT && elemtype == TypeDesc::FLOAT)) {
+                all_const = false;
+                break;
+            }
+        }
+        if (all_const && init) {
+            NOT_IMPLEMENTED;
+            std::vector<char> arrayvals(type.simpletype().size());
+            for (int i = 0; init; init = init->next(), ++i) {
+                NOT_IMPLEMENTED;
+                ASTliteral* lit = (ASTliteral*)init.get();
+                if (elemtype == TypeDesc::INT)
+                    ((int*)&arrayvals[0])[i] = lit->intval();
+                else if (elemtype == TypeDesc::FLOAT)
+                    ((float*)&arrayvals[0])[i] = lit->floatval();
+                else if (elemtype == TypeDesc::STRING)
+                    ((ustring*)&arrayvals[0])[i] = lit->ustrval();
+                else {
+                        OSL_DASSERT(0);
+                }
+            }
+            Symbol* c = m_compiler->make_constant(type.simpletype(),
+                                                  &arrayvals[0]);
+            emitcode("assign", sym, c);
+            // Tag end of init ops because of the early return
+            if (paraminit){
+                NOT_IMPLEMENTED;
+                sym->initend(m_compiler->next_op_label());
+            }
+            NOT_IMPLEMENTED;
+            return;
+        }
+    } else if (type.is_structure_array()) {
+        NOT_IMPLEMENTED;
+        for (int i = 0; init && i < type.arraylength(); ++i) {
+            NOT_IMPLEMENTED;
+            ASTNode* expr = init.get();
+            bool ctor     = false;
+            Symbol* dest  = sym;
+            switch (expr->nodetype()) {
+            case function_call_node: {
+                ASTfunction_call* fcall = static_cast<ASTfunction_call*>(expr);
+                if ((ctor = fcall->is_struct_ctr())) {
+                    expr = fcall->args().get();
+                        OSL_DASSERT(expr != nullptr);
+                }
+            } break;
+            case compound_initializer_node:
+                NOT_IMPLEMENTED;
+                ctor = static_cast<ASTcompound_initializer*>(expr)
+                    ->canconstruct();
+                break;
+            default: break;
+            }
+            NOT_IMPLEMENTED;
+            codegen_struct_initializers(expr, dest, ctor,
+                                        m_compiler->make_constant(i));
+
+            init = init->next();
+        }
+        if (paraminit) {
+            NOT_IMPLEMENTED;
+            sym->initend(m_compiler->next_op_label());
+        }
+        NOT_IMPLEMENTED;
+        return;
+    } else if (init->nodetype() == compound_initializer_node) {
+        NOT_IMPLEMENTED;
+        init = ((ASTcompound_initializer*)init.get())->initlist();
+    }
+    // Loop over a list of initializers (it's just 1 if not an array)...
+    for (int i = 0; init; init = init->next(), ++i) {
+        //NOT_IMPLEMENTED;
+        if (sym->typespec().is_structure()
+            && init->nodetype() == compound_initializer_node) {
+            NOT_IMPLEMENTED;
+            // Nested structure
+            ASTNode::ref finit
+                = ((ASTcompound_initializer*)init.get())->initlist();
+            codegen_struct_initializers(finit, sym);
+            break;
+        }
+
+        Symbol* dest = init->codegen_artic(sym);
+        if (dest != sym) {
+            NOT_IMPLEMENTED;
+            if (sym->typespec().is_array()) {
+                NOT_IMPLEMENTED;
+                // Array variable -- assign to the i-th element
+                dest = codegen_aassign(sym->typespec().elementtype(), dest, sym,
+                                       nullptr, i);
+            } else {
+                NOT_IMPLEMENTED;
+                // Non-array variable, just a simple assignment
+                emitcode("assign", sym, dest);
+            }
+        }
+        if (!sym->typespec().is_array())  // non-array type shouldn't loop
+            break;                        //  even if init is a list
+    }
+
+    if (paraminit) {
+
+        sym->initend(m_compiler->next_op_label());
+    }
+
+}
+
 
 
 Symbol*
@@ -1137,6 +1745,20 @@ ASTNode::codegen_struct_initializers(ref init, Symbol* sym, bool is_constructor,
 Symbol*
 ASTvariable_ref::codegen(Symbol*)
 {
+
+    return m_sym;
+}
+
+Symbol*
+ASTvariable_ref::codegen_artic(Symbol* dest)
+{
+    if(this->sym()->symtype() == SymTypeOutputParam){
+        std::cout << "out.";
+    } else if(this->sym()->symtype() == SymTypeParam){
+        std::cout << "in.";
+    }
+    std::cout << m_sym->name();
+
     return m_sym;
 }
 
@@ -1290,6 +1912,52 @@ ASTindex::codegen_assign(Symbol* src, Symbol* ind, Symbol* ind2, Symbol* ind3)
     }
 }
 
+void
+ASTindex::codegen_assign_artic(Symbol* src, Symbol* ind, Symbol* ind2, Symbol* ind3)
+{
+    NOT_IMPLEMENTED;
+    Symbol* lv = lvalue()->codegen();
+    if (!ind)
+        ind = index()->codegen();
+    if (!ind2)
+        ind2 = index2() ? index2()->codegen() : NULL;
+    if (!ind3)
+        ind3 = index3() ? index3()->codegen() : NULL;
+    if (lv->typespec().is_array()) {
+        TypeSpec elemtype = lv->typespec().elementtype();
+        if (ind3 && elemtype.is_matrix()) {
+            // Component of matrix array, e.g., matrixarray[i][c][r] = float
+            Symbol* temp = m_compiler->make_temporary(elemtype);
+            emitcode("aref", temp, lv, ind);
+            emitcode("mxcompassign", temp, ind2, ind3, src);
+            emitcode("aassign", lv, ind, temp);
+        } else if (ind2 && elemtype.is_triple()) {
+            // Component of triple array, e.g., colorarray[i][c] = float
+            Symbol* temp = m_compiler->make_temporary(elemtype);
+            emitcode("aref", temp, lv, ind);
+            emitcode("compassign", temp, ind2, src);
+            emitcode("aassign", lv, ind, temp);
+        } else {
+            src = codegen_aassign(elemtype, src, lv, ind);
+        }
+    } else if (lv->typespec().is_triple()) {
+        emitcode("compassign", lv, ind, src);
+    } else if (lv->typespec().is_matrix()) {
+        emitcode("mxcompassign", lv, ind, ind2, src);
+    } else {
+        OSL_ASSERT(0);
+    }
+}
+
+
+
+Symbol*
+ASTindex::codegen_artic(Symbol* dest)
+{
+    NOT_IMPLEMENTED;
+    return ASTNode::codegen_artic(dest);
+}
+
 
 
 Symbol*
@@ -1336,6 +2004,12 @@ ASTstructselect::codegen_assign(Symbol* dest, Symbol* src)
         emitcode("assign", dest, src);
 }
 
+void
+ASTstructselect::codegen_assign_artic(Symbol* dest, Symbol* src)
+{
+    NOT_IMPLEMENTED;
+}
+
 
 
 // A struct select needs to decipher whether there is an array index
@@ -1372,6 +2046,13 @@ ASTstructselect::codegen_index()
 
     return indexsym;
 }
+Symbol*
+ASTstructselect::codegen_artic(Symbol* dest)
+{
+    NOT_IMPLEMENTED;
+    return ASTNode::codegen_artic(dest);
+}
+
 
 
 
@@ -1541,6 +2222,137 @@ ASTbinary_expression::codegen(Symbol* dest)
     // Special case for closure operations
     if (typespec().is_closure()) {
         OSL_DASSERT(m_op == Mul || m_op == Div || m_op == Add);
+        if (m_op == Mul || m_op == Div) {
+            // Need to coerce the weight into a color.
+            // N.B. The typecheck always reorders c=k*c into c=c*k.
+            rsym = coerce(rsym, TypeDesc::TypeColor, true);
+        }
+        emitcode(opword(), dest, lsym, rsym);
+        return dest;
+    }
+
+    // Promote ints to float-like types, for mixed arithmetic
+    if ((m_op == Mul || m_op == Div || m_op == Add || m_op == Sub)) {
+        if (lsym->typespec().is_float_based() && rsym->typespec().is_int()) {
+            if (rsym->symtype() == SymTypeConst) {
+                float val = ((ConstantSymbol*)rsym)->floatval();
+                rsym      = m_compiler->make_constant(val);
+            } else {
+                Symbol* tmp = rsym;
+                rsym        = m_compiler->make_temporary(lsym->typespec());
+                emitcode("assign", rsym, tmp);  // type coercion
+            }
+        } else if (lsym->typespec().is_int()
+                   && rsym->typespec().is_float_based()) {
+            if (lsym->symtype() == SymTypeConst) {
+                float val = ((ConstantSymbol*)lsym)->floatval();
+                lsym      = m_compiler->make_constant(val);
+            } else {
+                Symbol* tmp = lsym;
+                lsym        = m_compiler->make_temporary(rsym->typespec());
+                emitcode("assign", lsym, tmp);  // type coercion
+            }
+        }
+    }
+
+    emitcode(opword(), dest, lsym, rsym);
+    return dest;
+}
+
+std::string op_to_string(int op_int){
+    ASTNode::Operator op = static_cast<ASTNode::Operator>(op_int);
+    switch (op) {
+    case ASTNode::Nothing: NOT_IMPLEMENTED; break;
+    case ASTNode::Decr: return "dec";break;
+    case ASTNode::Incr: return "inc";break;
+    case ASTNode::Assign:return "="; break;
+    case ASTNode::Mul: return "mul";break;
+    case ASTNode::Div: return "div";break;
+    case ASTNode::Add: return "add";break;
+    case ASTNode::Sub:return "sub"; break;
+    case ASTNode::Mod: return "mod";break;
+    case ASTNode::Equal: return "eq";break;
+    case ASTNode::NotEqual:return "neq"; break;
+    case ASTNode::Greater: return "ge";break;
+    case ASTNode::Less: return "le";break;
+    case ASTNode::GreaterEqual: return "geq";break;
+    case ASTNode::LessEqual:return "leq"; break;
+    case ASTNode::BitAnd: return "band";break;
+    case ASTNode::BitOr:return "bor"; break;
+    case ASTNode::Xor: return "bxor";break;
+    case ASTNode::Compl:return "bcomp"; break;
+    case ASTNode::And: return "land";break;
+    case ASTNode::Or:return "lor"; break;
+    case ASTNode::Not: return "lnot";break;
+    case ASTNode::ShiftLeft: return "shiftl";break;
+    case ASTNode::ShiftRight:return "shiftr"; break;
+    default: NOT_IMPLEMENTED; break;
+    }
+}
+
+std::string artic_type_string_to_string(TypeSpec typeSpec){
+    auto tstring = typeSpec.artic_string();
+    size_t pos;
+    while((pos = tstring.find('[')) != std::string::npos){
+        tstring.replace(pos, 1, "_");
+    }
+
+    while((pos = tstring.find('<')) != std::string::npos){
+        tstring.replace(pos, 1, "_");
+    }
+
+    while((pos = tstring.find('>')) != std::string::npos){
+        tstring.replace(pos, 1, "_");
+    }
+    return tstring;
+}
+
+Symbol*
+ASTbinary_expression::codegen_artic(Symbol* dest)
+{
+    {
+        std::cout << "ops_" << artic_type_string_to_string(this->typespec()) << "." << op_to_string(this->m_op) << "(";
+        left()->codegen_artic();
+        std::cout << ", ";
+        right()->codegen_artic();
+        std::cout << ")";
+    }
+
+    if (m_function_overload) {
+        NOT_IMPLEMENTED;
+        // A little crazy, but we temporarily construct an ASTfunction_call
+        // in order to codegen this overloaded operator. Slightly tricky
+        // is that we need to concatenate our left and right arguments into
+        // an arg list.
+        ustring funcname = ustring::sprintf("__operator__%s__", opword());
+        if (left()->nextptr() || right()->nextptr()) {
+            errorf("Overloaded %s cannot be passed arguments %s and %s",
+                   funcname, left()->nodetypename(), right()->nodetypename());
+            return dest;
+        }
+        ref args = left();
+        args->append(right().get());
+        ASTfunction_call fc(m_compiler, funcname, args.get(),
+                            m_function_overload);
+        fc.typecheck(typespec());
+        dest = fc.codegen(dest);
+        // now put things back the way we found them
+        left()->detach_next();
+        return dest;
+    }
+
+    // Special case for logic ops that short-circuit
+    if (m_op == And || m_op == Or)
+        return codegen_logic_artic(dest);
+
+    Symbol* lsym = left()->codegen();
+    Symbol* rsym = right()->codegen();
+    if (dest == NULL || !equivalent(dest->typespec(), typespec()))
+        dest = m_compiler->make_temporary(typespec());
+
+    // Special case for closure operations
+    if (typespec().is_closure()) {
+            OSL_DASSERT(m_op == Mul || m_op == Div || m_op == Add);
         if (m_op == Mul || m_op == Div) {
             // Need to coerce the weight into a color.
             // N.B. The typecheck always reorders c=k*c into c=c*k.
@@ -1831,7 +2643,7 @@ ASTfunction_call::codegen(Symbol* dest)
         TypeSpec formaltype = (i < (int)polyargs.size())
                                   ? polyargs[i]
                                   : TypeSpec(TypeDesc::UNKNOWN);
-        bool writearg = argwrite(i + returnarg);
+        bool writearg       = argwrite(i + returnarg);
         codegen_arg(argdest, index, index2, index3, i, a, form, formaltype,
                     writearg, indexed_output_params);
         if (form)
@@ -1948,6 +2760,183 @@ ASTfunction_call::codegen(Symbol* dest)
     return dest;
 }
 
+Symbol*
+ASTfunction_call::codegen_artic(Symbol* dest)
+{
+    std::cout << m_name << "(";
+
+    if (is_struct_ctr()) {
+        codegen_struct_initializers(args(), dest, true /*is_constructor*/);
+        return dest;
+    }
+
+
+
+    // Set up a return destination if not passed one (or not the right type)
+    if (!typespec().is_void()) {
+        //NOT_IMPLEMENTED;
+        if (dest == NULL || !equivalent(dest->typespec(), typespec())) {
+            //NOT_IMPLEMENTED;
+            dest = m_compiler->make_temporary(typespec());
+        }
+    }
+
+    std::vector<TypeSpec> polyargs;
+    const char* param_argcodes = func()->argcodes().c_str();
+    int len;
+    m_compiler->type_from_code(param_argcodes, &len);  // skip ret type
+    m_compiler->typespecs_from_codes(param_argcodes + len, polyargs);
+
+    // Generate code for all the individual arguments.  Remember the
+    // individual indices for arguments that are array elements or
+    // vector/color/matrix components.
+    SymbolPtrVec argdest, index, index2, index3;
+    bool indexed_output_params = false;
+    int argdest_return_offset  = 0;
+    ASTNode* a                 = args().get();
+
+    int returnarg = !typespec().is_void();
+    ASTNode* form = is_user_function() ? user_function()->formals().get()
+                                       : NULL;
+    for (int i = 0; a; a = a->nextptr(), ++i) {
+        //NOT_IMPLEMENTED;
+        if(i){
+            std::cout << ", ";
+        }
+        TypeSpec formaltype = (i < (int)polyargs.size())
+                              ? polyargs[i]
+                              : TypeSpec(TypeDesc::UNKNOWN);
+        bool writearg       = argwrite(i + returnarg);
+        codegen_arg_artic(argdest, index, index2, index3, i, a, form, formaltype,
+                    writearg, indexed_output_params);
+
+
+        if (form)
+            form = form->nextptr();
+    }
+
+    if (is_user_function()) {
+        NOT_IMPLEMENTED;
+        // Record the return location
+        func()->return_location(typespec().is_void() ? NULL : dest);
+
+        // Alias each function formal parameter to the symbol holding
+        // the corresponding actual parameter.
+        ASTNode* form = user_function()->formals().get();
+        ASTNode* a    = args().get();
+        for (int i = 0; a; a = a->nextptr(), form = form->nextptr(), ++i) {
+            NOT_IMPLEMENTED;
+            ASTvariable_declaration* f = (ASTvariable_declaration*)form;
+            const TypeSpec& ftype(f->sym()->typespec());
+            if (ftype.is_structure() || ftype.is_structure_array()) {
+                NOT_IMPLEMENTED;
+                // If the formal parameter is a struct, we also need to
+                // alias each of the fields
+                if (a->nodetype() == variable_ref_node
+                    || a->nodetype() == function_call_node
+                    || a->nodetype() == compound_initializer_node
+                    || a->nodetype() == binary_expression_node
+                    || a->nodetype() == unary_expression_node) {
+                    NOT_IMPLEMENTED;
+                    // Passed a variable that is a struct ; make the struct
+                    // fields of the formal param alias to the struct fields
+                    // of the actual param. Exact same logic if passed the
+                    // result location of a call to a function that returns
+                    // a struct.
+                    struct_pair_all_fields(ftype.structspec(),
+                                           ustring(f->sym()->mangled()),
+                                           ustring(argdest[i]->mangled()));
+                } else if (a->nodetype() == structselect_node) {
+                    NOT_IMPLEMENTED;
+                    // Passed a field of a struct, which is itself a struct.
+                    // This is very similar to the variable_ref_node case.
+                    struct_pair_all_fields(
+                        ftype.structspec(), ustring(f->sym()->mangled()),
+                        ustring(((ASTstructselect*)a)->fieldsym()->mangled()));
+                } else if (a->nodetype() == index_node) {
+                    NOT_IMPLEMENTED;
+                    // Passed one struct in an array of structs.  That throws
+                    // us for a spin.  Not much to do but *copy* the struct
+                    // elements.
+                    ASTindex* ind      = (ASTindex*)a;
+                    Symbol* arrayindex = ind->index()->codegen();
+                    struct_pair_all_fields(ftype.structspec(),
+                                           ustring(f->sym()->mangled()),
+                                           ustring(argdest[i]->mangled()),
+                                           arrayindex);
+                } else {
+                    OSL_ASSERT(0 && "unhandled structure designation");
+                }
+            }
+            f->sym()->alias(argdest[i]);
+        }
+
+        // Return statements inside the middle of a function (not the
+        // last statement in the function, or inside a conditional)
+        // require special care, since we don't have a general "jump"
+        // instruction.  Instead, we wrap the function call inside a
+        // "functioncall" op that marks the range.
+        int loop_op = emitcode("functioncall",
+                               m_compiler->make_constant(m_name));
+
+        // Generate the code for the function body
+        m_compiler->push_function(func());
+        codegen_list(user_function()->statements());
+        m_compiler->pop_function();
+
+        // Go back and mark the "functioncall" with the right jump address
+        m_compiler->ircode(loop_op).argread(0, true);    // read
+        m_compiler->ircode(loop_op).argwrite(0, false);  // not written
+        int endlabel = m_compiler->next_op_label();
+        m_compiler->ircode(loop_op).set_jump(endlabel);
+
+    } else {
+        //NOT_IMPLEMENTED;
+        bool isclosure = func() && func()->typespec().is_closure();
+        if (isclosure) {
+         //   NOT_IMPLEMENTED;
+            Symbol* clname = m_compiler->make_constant(m_name);
+            argdest.insert(argdest.begin(), clname);
+            argdest_return_offset++;
+        }
+        // Built-in function
+        if (!typespec().is_void()) {  // Insert the return dest if non-void
+
+            argdest.insert(argdest.begin(), dest);
+            argdest_return_offset++;
+        }
+        // Emit the actual op
+        emitcode(isclosure ? "closure" : m_name.c_str(), argdest.size(),
+                 (argdest.size()) ? &argdest[0] : NULL);
+        // Propagate derivative-taking info to the opcode
+        m_compiler->lastop().set_argbits(m_argread, m_argwrite,
+                                         m_argtakesderivs);
+    }
+
+    if (indexed_output_params) {
+        NOT_IMPLEMENTED;
+        // Second half of the element/component-passed-as-output-param
+        // issue -- restore the written values to the right spots.
+        a = args().get();
+        for (int i = 0; a; a = a->nextptr(), ++i) {
+            NOT_IMPLEMENTED;
+            if (index[i]) {
+                NOT_IMPLEMENTED;
+                OSL_ASSERT(a->nodetype() == ASTNode::index_node
+                           || a->nodetype() == ASTNode::structselect_node);
+                ASTindex* indexnode
+                    = (a->nodetype() == index_node)
+                      ? static_cast<ASTindex*>(a)
+                      : static_cast<ASTstructselect*>(a)->compindex();
+                indexnode->codegen_assign(argdest[i + argdest_return_offset],
+                                          index[i], index2[i], index3[i]);
+            }
+        }
+    }
+    std::cout << ")";
+    return dest;
+}
+
 
 
 /// Generate code for one argument to the function, appending its value
@@ -2010,6 +2999,68 @@ ASTfunction_call::codegen_arg(SymbolPtrVec& argdest, SymbolPtrVec& index1,
         arg->errorf("Invalid argument to function");
 }
 
+void
+ASTfunction_call::codegen_arg_artic(SymbolPtrVec& argdest, SymbolPtrVec& index1,
+                                    SymbolPtrVec& index2, SymbolPtrVec& index3,
+                                    int argnum, ASTNode* arg, ASTNode* form,
+                                    const TypeSpec& formaltype, bool writearg,
+                                    bool& indexed_output_params)
+{
+
+
+    Symbol* thisarg = NULL;
+    Symbol *ind1 = NULL, *ind2 = NULL, *ind3 = NULL;  // array/component indices
+    bool is_struct = arg->typespec().is_structure();
+    if (is_struct) {
+        NOT_IMPLEMENTED;
+        // Structure arguments
+        thisarg = arg->codegen();
+    } else if (arg && writearg
+               && (arg->nodetype() == index_node
+                   || (arg->nodetype() == structselect_node
+                       && ((ASTstructselect*)arg)->compindex()))) {
+        NOT_IMPLEMENTED;
+        // Special case for individual array elements or vec/col/matrix
+        // components being passed as output params of the function --
+        // these aren't really lvalues, so we need to restore their
+        // values.  We save the indices we genearate code for here...
+        ASTindex* indexnode
+            = (arg->nodetype() == index_node)
+              ? static_cast<ASTindex*>(arg)
+              : static_cast<ASTstructselect*>(arg)->compindex();
+        thisarg               = indexnode->codegen(NULL, ind1, ind2, ind3);
+        indexed_output_params = true;
+    } else {
+        // Anything else
+        thisarg = arg->codegen_artic();
+    }
+    // Handle type coercion of the argument
+    if (!is_struct && formaltype.simpletype() != TypeDesc(TypeDesc::UNKNOWN)
+        && formaltype.simpletype() != TypeDesc(TypeDesc::UNKNOWN, -1)) {
+        Symbol* origarg = thisarg;
+        thisarg         = coerce(thisarg, formaltype);
+        // Error to type-coerce an output -- where would the result go?
+        if (thisarg != origarg && form
+            && !equivalent(origarg->typespec(), form->typespec())
+            && form->nodetype() == variable_declaration_node
+            && ((ASTvariable_declaration*)form)->is_output()) {
+            errorf("Cannot pass '%s %s' as argument %d to %s\n\t"
+                   "because it is an output parameter that must be a %s",
+                   origarg->typespec(), origarg->name(), argnum + 1,
+                   user_function()->func()->name(), form->typespec());
+        }
+    }
+    if (thisarg) {
+        argdest.push_back(thisarg);
+        index1.push_back(ind1);
+        index2.push_back(ind2);
+        index3.push_back(ind3);
+    } else
+        arg->errorf("Invalid argument to function");
+
+    
+}
+
 
 
 void
@@ -2046,6 +3097,23 @@ ASTliteral::codegen(Symbol* /*dest*/)
         return m_compiler->make_constant(intval());
     if (t.is_float())
         return m_compiler->make_constant(floatval());
+    OSL_DASSERT(0 && "Don't know how to generate code for this literal");
+    return nullptr;
+}
+Symbol*
+ASTliteral::codegen_artic(Symbol* dest)
+{
+
+    TypeSpec t = typespec();
+    if (t.is_string()){
+        std::cout << "String::" << ustrval().string();
+        return m_compiler->make_constant(ustring(strval()));}
+    if (t.is_int()){
+        std::cout << intval();
+        return m_compiler->make_constant(intval());}
+    if (t.is_float()){
+        std::cout << std::to_string(floatval());
+        return m_compiler->make_constant(floatval());}
     OSL_DASSERT(0 && "Don't know how to generate code for this literal");
     return nullptr;
 }

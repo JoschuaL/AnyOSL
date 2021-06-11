@@ -9,6 +9,8 @@
 #include <OSL/oslcomp.h>
 #include "symtab.h"
 
+#define NOT_IMPLEMENTED do {std::cerr << "NOT IMPLEMENTED "; OSL_ASSERT(false); exit(3);} while(0)
+
 
 class oslFlexLexer;
 
@@ -143,6 +145,8 @@ public:
     /// course).
     virtual Symbol* codegen(Symbol* dest = NULL);
 
+    virtual Symbol* codegen_artic(Symbol* dest = NULL);
+
     /// Generate IR code for this node make sure it's boiled down to an
     /// int (i.e. if not already an int, generate one that's 1 if the
     /// original code was non-zero or non-empty string).  The optional
@@ -151,6 +155,9 @@ public:
     /// 'boolify' is true and the normal code generates an int, convert
     /// it to a 0 or 1 value.  If 'invert' is true, invert the result.
     Symbol* codegen_int(Symbol* dest = NULL, bool boolify = false,
+                        bool invert = false);
+
+    Symbol* codegen_int_artic(Symbol* dest = NULL, bool boolify = false,
                         bool invert = false);
 
     /// Append a new node (specified by raw pointer) onto the end of the
@@ -331,18 +338,27 @@ protected:
     /// the Symbol* for the last thing generated.
     static Symbol* codegen_list(ref node, Symbol* dest = NULL);
 
+    static Symbol* codegen_list_artic(ref node, Symbol* dest = NULL);
+
     /// Generate code for all the children of this node.
     ///
     void codegen_children();
+
+    void codegen_children_artic();
 
     /// Emit a single IR opcode -- append one op to the list of
     /// intermediate code, returning the label (address) of the new op.
     int emitcode(const char* opname, Symbol* arg0 = NULL, Symbol* arg1 = NULL,
                  Symbol* arg2 = NULL, Symbol* arg3 = NULL);
 
+    int emitcode_artic(const char* opname, Symbol* arg0 = NULL, Symbol* arg1 = NULL,
+                 Symbol* arg2 = NULL, Symbol* arg3 = NULL);
+
     /// Emit a single IR opcode -- append one op to the list of
     /// intermediate code, returning the label (address) of the new op.
     int emitcode(const char* opname, size_t nargs, Symbol** args);
+
+    int emitcode_artic(const char* opname, size_t nargs, Symbol** args);
 
     /// Coerce sym into being the desired type.  Maybe it already is, or
     /// maybe a temporary needs to be created.  Only do float->triple
@@ -370,9 +386,16 @@ protected:
                                bool copywholearrays, int intindex,
                                bool paraminit);
 
+    void codegen_assign_struct_artic(StructSpec* structspec, ustring dstsym,
+                               ustring srcsym, Symbol* arrayindex,
+                               bool copywholearrays, int intindex,
+                               bool paraminit);
+
     // Helper: generate code for an initializer list -- either a single
     // item to a scalar, or a list to an array.
     void codegen_initlist(ref init, TypeSpec type, Symbol* sym);
+
+    void codegen_initlist_artic(ref init, TypeSpec type, Symbol* sym);
 
     // Special code generation for structure initializers.
     // It's in the ASTNode base class because it's used from mutiple
@@ -381,10 +404,17 @@ protected:
                                         bool is_constructor = false,
                                         Symbol* arrayindex  = nullptr);
 
+    Symbol* codegen_struct_initializers_artic(ref init, Symbol* sym,
+                                        bool is_constructor = false,
+                                        Symbol* arrayindex  = nullptr);
+
     // Codegen an array assignment: lval[index] = src
     // If no index is provided the constant i is used.
     // Will return either src or a temporary that was codegened.
     Symbol* codegen_aassign(TypeSpec elemtype, Symbol* src, Symbol* lval,
+                            Symbol* index, int i = 0);
+
+    Symbol* codegen_aassign_artic(TypeSpec elemtype, Symbol* src, Symbol* lval,
                             Symbol* index, int i = 0);
 
     // Check whether the node's symbol destination is ok to write. Return
@@ -397,6 +427,9 @@ protected:
     // init==NULL) and append it to 'out'.  Return whether the full
     // initialization is comprised only of literals (no init ops needed).
     bool one_default_literal(const Symbol* sym, ASTNode* init, std::string& out,
+                             string_view separator = " ") const;
+
+    bool one_default_literal_artic(const Symbol* sym, ASTNode* init, std::string& out,
                              string_view separator = " ") const;
 
     void error_impl(string_view msg) const;
@@ -429,6 +462,7 @@ public:
     void print(std::ostream& out, int indentlevel = 0) const;
     // TypeSpec typecheck (TypeSpec expected); // Use the default
     Symbol* codegen(Symbol* dest = NULL);
+    Symbol* codegen_artic(Symbol* dest = NULL);
 
     ref metadata() const { return child(0); }
     ref formals() const { return child(1); }
@@ -452,6 +486,10 @@ public:
     void print(std::ostream& out, int indentlevel = 0) const;
     TypeSpec typecheck(TypeSpec expected);
     Symbol* codegen(Symbol* /*dest*/)
+    {
+        return nullptr;  // generates no code on its own
+    }
+    Symbol* codegen_artic(Symbol* /*dest*/)
     {
         return nullptr;  // generates no code on its own
     }
@@ -483,6 +521,7 @@ public:
     void print(std::ostream& out, int indentlevel = 0) const;
     TypeSpec typecheck(TypeSpec expected);
     Symbol* codegen(Symbol* dest = NULL);
+    Symbol* codegen_artic(Symbol* dest = NULL);
 
     ref init() const { return child(0); }
     ref meta() const { return child(1); }
@@ -507,11 +546,20 @@ public:
                                 std::string& out,
                                 string_view separator = " ") const;
 
+    bool param_default_literals_artic(const Symbol* sym, ASTNode* init,
+                                std::string& out,
+                                string_view separator = " ") const;
+
     void codegen_initializer(ref init, Symbol* sym);
+    void codegen_initializer_artic(ref init, Symbol* sym);
 
     void register_struct_init(ustring name, ASTNode* init)
     {
         m_struct_field_inits.emplace_back(name, init);
+    }
+
+    bool is_parameter(){
+        return m_isparam;
     }
 
 private:
@@ -537,6 +585,7 @@ public:
     void print(std::ostream& out, int indentlevel = 0) const;
     TypeSpec typecheck(TypeSpec expected);
     Symbol* codegen(Symbol* dest = NULL);
+    Symbol* codegen_artic(Symbol* dest = NULL);
     ustring name() const { return m_name; }
     std::string mangled() const { return m_sym->mangled(); }
     Symbol* sym() const { return m_sym; }
@@ -558,6 +607,7 @@ public:
     const char* childname(size_t i) const;
     TypeSpec typecheck(TypeSpec expected);
     Symbol* codegen(Symbol* dest = NULL);
+    Symbol* codegen_artic(Symbol* dest = NULL);
 
     ref var() const { return child(0); }
 };
@@ -574,6 +624,7 @@ public:
     const char* childname(size_t i) const;
     TypeSpec typecheck(TypeSpec expected);
     Symbol* codegen(Symbol* dest = NULL);
+    Symbol* codegen_artic(Symbol* dest = NULL);
 
     ref var() const { return child(0); }
 };
@@ -590,10 +641,12 @@ public:
     const char* childname(size_t i) const;
     TypeSpec typecheck(TypeSpec expected = TypeSpec());
     Symbol* codegen(Symbol* dest = NULL);
+    Symbol* codegen_artic(Symbol* dest = NULL);
 
     /// Special code generation that, when it generates the code for the
     /// indices, stores those in the extra variables.
     Symbol* codegen(Symbol* dest, Symbol*& ind, Symbol*& ind2, Symbol*& ind3);
+    Symbol* codegen_artic(Symbol* dest, Symbol*& ind, Symbol*& ind2, Symbol*& ind3);
 
     /// Special code generation of assignment of src to this indexed
     /// location. The ind1, ind2, ind3 symbols are overrides; if not
@@ -601,9 +654,16 @@ public:
     void codegen_assign(Symbol* src, Symbol* ind = NULL, Symbol* ind2 = NULL,
                         Symbol* ind3 = NULL);
 
+    void codegen_assign_artic(Symbol* src, Symbol* ind = NULL, Symbol* ind2 = NULL,
+                        Symbol* ind3 = NULL);
+
     /// Copy one element of the struct array named by srcname into the
     /// struct destname.
     void codegen_copy_struct_array_element(StructSpec* structspec,
+                                           ustring destname, ustring srcname,
+                                           Symbol* index);
+
+    void codegen_copy_struct_array_element_artic(StructSpec* structspec,
                                            ustring destname, ustring srcname,
                                            Symbol* index);
 
@@ -623,10 +683,12 @@ public:
     void print(std::ostream& out, int indentlevel = 0) const;
     TypeSpec typecheck(TypeSpec expected);
     Symbol* codegen(Symbol* dest = NULL);
+    Symbol* codegen_artic(Symbol* dest = NULL);
 
     /// Special code generation of assignment of src to this structure
     /// field.
     void codegen_assign(Symbol* dest, Symbol* src);
+    void codegen_assign_artic(Symbol* dest, Symbol* src);
 
     ref lvalue() const { return child(0); }
     ustring field() const { return m_field; }
@@ -664,6 +726,7 @@ public:
     const char* childname(size_t i) const;
     TypeSpec typecheck(TypeSpec expected);
     Symbol* codegen(Symbol* dest = NULL);
+    Symbol* codegen_artic(Symbol* dest = NULL);
 
     ref cond() const { return child(0); }
     ref truestmt() const { return child(1); }
@@ -684,6 +747,7 @@ public:
     const char* opname() const;
     TypeSpec typecheck(TypeSpec expected);
     Symbol* codegen(Symbol* dest = NULL);
+    Symbol* codegen_artic(Symbol* dest = NULL);
 
     ref init() const { return child(0); }
     ref cond() const { return child(1); }
@@ -707,6 +771,7 @@ public:
     const char* opname() const;
     TypeSpec typecheck(TypeSpec expected);
     Symbol* codegen(Symbol* dest = NULL);
+    Symbol* codegen_artic(Symbol* dest = NULL);
 };
 
 
@@ -722,6 +787,7 @@ public:
     const char* childname(size_t i) const;
     TypeSpec typecheck(TypeSpec expected);
     Symbol* codegen(Symbol* dest = NULL);
+    Symbol* codegen_artic(Symbol* dest = NULL);
 
     ref expr() const { return child(0); }
 };
@@ -745,6 +811,7 @@ public:
     const char* nodetypename() const { return "type_constructor"; }
     const char* childname(size_t i) const;
     Symbol* codegen(Symbol* dest = NULL);
+    Symbol* codegen_artic(Symbol* dest = NULL);
 
     ref args() const { return child(0); }
 
@@ -772,6 +839,7 @@ public:
     const char* nodetypename() const { return "compound_initializer"; }
     const char* childname(size_t i) const;
     Symbol* codegen(Symbol* dest = NULL);
+    Symbol* codegen_artic(Symbol* dest = NULL);
 
     ref initlist() const { return child(0); }
 
@@ -796,6 +864,7 @@ public:
     const char* opword() const;
     TypeSpec typecheck(TypeSpec expected);
     Symbol* codegen(Symbol* dest = NULL);
+    Symbol* codegen_artic(Symbol* dest = NULL);
 
     ref var() const { return child(0); }
     ref expr() const { return child(1); }
@@ -813,6 +882,7 @@ public:
     const char* opword() const;
     TypeSpec typecheck(TypeSpec expected);
     Symbol* codegen(Symbol* dest = NULL);
+    Symbol* codegen_artic(Symbol* dest = NULL);
 
     ref expr() const { return child(0); }
 
@@ -833,6 +903,7 @@ public:
     const char* opword() const;
     TypeSpec typecheck(TypeSpec expected);
     Symbol* codegen(Symbol* dest = NULL);
+    Symbol* codegen_artic(Symbol* dest = NULL);
 
     ref left() const { return child(0); }
     ref right() const { return child(1); }
@@ -842,6 +913,7 @@ private:
 
     // Special code generation for short-circuiting logical ops
     Symbol* codegen_logic(Symbol* dest);
+    Symbol* codegen_logic_artic(Symbol* dest);
 };
 
 
@@ -858,6 +930,7 @@ public:
     const char* childname(size_t i) const;
     TypeSpec typecheck(TypeSpec expected);
     Symbol* codegen(Symbol* dest = NULL);
+    Symbol* codegen_artic(Symbol* dest = NULL);
 
     ref cond() const { return child(0); }
     ref trueexpr() const { return child(1); }
@@ -877,6 +950,7 @@ public:
     const char* childname(size_t /*i*/) const { return "expression_list"; }
     TypeSpec typecheck(TypeSpec expected);
     Symbol* codegen(Symbol* dest = NULL);
+    Symbol* codegen_artic(Symbol* dest = NULL);
 
     ref expr() const { return child(0); }
 };
@@ -896,6 +970,7 @@ public:
     const char* childname(size_t i) const;
     TypeSpec typecheck(TypeSpec expected);
     Symbol* codegen(Symbol* dest = NULL);
+    Symbol* codegen_artic(Symbol* dest = NULL);
 
     ref expr() const { return child(0); }
 };
@@ -912,6 +987,7 @@ public:
     void print(std::ostream& out, int indentlevel = 0) const;
     TypeSpec typecheck(TypeSpec expected);
     Symbol* codegen(Symbol* dest = NULL);
+    Symbol* codegen_artic(Symbol* dest = NULL);
 
     FunctionSymbol* func() const { return (FunctionSymbol*)m_sym; }
     ref args() const { return child(0); }
@@ -1003,6 +1079,11 @@ private:
                      ASTNode* arg, ASTNode* form, const TypeSpec& formaltype,
                      bool writearg, bool& indexed_output_params);
 
+    void codegen_arg_artic(SymbolPtrVec& argdest, SymbolPtrVec& index,
+                     SymbolPtrVec& index1, SymbolPtrVec& index2, int argnum,
+                     ASTNode* arg, ASTNode* form, const TypeSpec& formaltype,
+                     bool writearg, bool& indexed_output_params);
+
     /// Call compiler->struct_field_pair for each field in the struct.
     ///
     void struct_pair_all_fields(StructSpec* structspec, ustring formal,
@@ -1043,6 +1124,7 @@ public:
     void print(std::ostream& out, int indentlevel) const;
     TypeSpec typecheck(TypeSpec /*expected*/) { return m_typespec; }
     Symbol* codegen(Symbol* dest = NULL);
+    Symbol* codegen_artic(Symbol* dest = NULL);
 
     const char* strval() const { return m_s.c_str(); }
     int intval() const { return m_i; }

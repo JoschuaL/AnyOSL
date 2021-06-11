@@ -31,6 +31,8 @@ typedef std::set<const Symbol*> SymPtrSet;
 /// depends on it).
 typedef std::map<const Symbol*, SymPtrSet> SymDependencyMap;
 
+enum CompileTargets { OSO, ARTIC };
+
 
 
 class OSLCompilerImpl {
@@ -499,6 +501,7 @@ private:
     std::string m_deps_target;              ///< Custom target: -MF
     std::set<ustring> m_file_dependencies;  ///< All include file dependencies
     std::stack<TypeSpec> m_typespec_stack;  ///< Just for function_declaration
+    CompileTargets m_compile_target;
 };
 
 

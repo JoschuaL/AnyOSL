@@ -260,6 +260,7 @@ OSLCompilerImpl::read_compile_options(const std::vector<std::string>& options,
 {
     m_output_filename.clear();
     m_preprocess_only = false;
+    m_compile_target  = CompileTargets::OSO;
     for (size_t i = 0; i < options.size(); ++i) {
         if (options[i] == "-v") {
             // verbose mode
@@ -275,6 +276,12 @@ OSLCompilerImpl::read_compile_options(const std::vector<std::string>& options,
         } else if (options[i] == "-o" && i < options.size() - 1) {
             ++i;
             m_output_filename = options[i];
+        } else if (options[i] == "-t" && i < options.size() - 1) {
+            ++i;
+            if (options[i] == "artic" || options[i] == "Artic"
+                || options[i] == "ARTIC") {
+                m_compile_target = CompileTargets::ARTIC;
+            }
         } else if (options[i] == "-O0") {
             m_optimizelevel = 0;
         } else if (options[i] == "-O" || options[i] == "-O1") {
@@ -459,6 +466,7 @@ OSLCompilerImpl::compile(string_view filename,
             write_dependency_file(filename);
 
         if (!error_encountered()) {
+            shader()->codegen_artic();
             shader()->codegen();
             track_variable_dependencies();
             track_variable_lifetimes();

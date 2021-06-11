@@ -93,6 +93,10 @@ public:
     ///
     std::string string() const;
 
+    const std::string artic_string();
+
+    const std::string artic_simpletype();
+
     /// Express the type as a string (char *).  This is safe, the caller
     /// is not responsible for freeing the characters.
     const char* c_str() const;
@@ -185,6 +189,8 @@ public:
     /// Return a reference to the structure list.
     ///
     static std::vector<std::shared_ptr<StructSpec>>& struct_list();
+
+
 
     /// Is this an array (either a simple array, or an array of structs)?
     ///

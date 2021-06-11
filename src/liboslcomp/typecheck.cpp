@@ -6,6 +6,8 @@
 #include <vector>
 
 #include "oslcomp_pvt.h"
+#include "ast.h"
+
 
 #include <OpenImageIO/strutil.h>
 namespace Strutil = OIIO::Strutil;
@@ -126,12 +128,19 @@ TypeSpec ASTvariable_ref::typecheck(TypeSpec /*expected*/)
 
 
 
+
 TypeSpec ASTpreincdec::typecheck(TypeSpec /*expected*/)
 {
     typecheck_children();
     m_is_lvalue = var()->is_lvalue();
     m_typespec  = var()->typespec();
     return m_typespec;
+}
+Symbol*
+ASTpreincdec::codegen_artic(Symbol* dest)
+{
+    NOT_IMPLEMENTED;
+    return ASTNode::codegen_artic(dest);
 }
 
 
@@ -144,6 +153,12 @@ TypeSpec ASTpostincdec::typecheck(TypeSpec /*expected*/)
     m_is_lvalue = false;
     m_typespec  = var()->typespec();
     return m_typespec;
+}
+Symbol*
+ASTpostincdec::codegen_artic(Symbol* dest)
+{
+    NOT_IMPLEMENTED;
+    return ASTNode::codegen_artic(dest);
 }
 
 
@@ -245,6 +260,12 @@ TypeSpec ASTconditional_statement::typecheck(TypeSpec /*expected*/)
         errorf("Cannot use an array as an 'if' condition");
     return m_typespec = TypeDesc(TypeDesc::NONE);
 }
+Symbol*
+ASTconditional_statement::codegen_artic(Symbol* dest)
+{
+    NOT_IMPLEMENTED;
+    return ASTNode::codegen_artic(dest);
+}
 
 
 
@@ -266,6 +287,12 @@ TypeSpec ASTloop_statement::typecheck(TypeSpec /*expected*/)
         errorf("Cannot use an array as an '%s' condition", opname());
     return m_typespec = TypeDesc(TypeDesc::NONE);
 }
+Symbol*
+ASTloop_statement::codegen_artic(Symbol* dest)
+{
+    NOT_IMPLEMENTED;
+    return ASTNode::codegen_artic(dest);
+}
 
 
 
@@ -274,6 +301,12 @@ TypeSpec ASTloopmod_statement::typecheck(TypeSpec /*expected*/)
     if (m_compiler->nesting_level(true /*loops*/) < 1)
         errorf("Cannot '%s' here -- not inside a loop.", opname());
     return m_typespec = TypeDesc(TypeDesc::NONE);
+}
+Symbol*
+ASTloopmod_statement::codegen_artic(Symbol* dest)
+{
+    NOT_IMPLEMENTED;
+    return ASTNode::codegen_artic(dest);
 }
 
 
@@ -376,6 +409,12 @@ TypeSpec ASTreturn_statement::typecheck(TypeSpec /*expected*/)
     }
     return TypeSpec();  // TODO: what should be returned here?
 }
+Symbol*
+ASTreturn_statement::codegen_artic(Symbol* dest)
+{
+    NOT_IMPLEMENTED;
+    return ASTNode::codegen_artic(dest);
+}
 
 
 
@@ -427,6 +466,12 @@ ASTunary_expression::typecheck(TypeSpec expected)
     default: errorf("unknown unary operator");
     }
     return m_typespec;
+}
+Symbol*
+ASTunary_expression::codegen_artic(Symbol* dest)
+{
+    NOT_IMPLEMENTED;
+    return ASTNode::codegen_artic(dest);
 }
 
 
@@ -589,6 +634,13 @@ ASTbinary_expression::typecheck(TypeSpec expected)
     return TypeSpec();
 }
 
+Symbol*
+ASTbinary_expression::codegen_logic_artic(Symbol* dest)
+{
+    NOT_IMPLEMENTED;
+    return nullptr;
+}
+
 
 
 TypeSpec
@@ -621,6 +673,12 @@ ASTternary_expression::typecheck(TypeSpec expected)
 
     return m_typespec;
 }
+Symbol*
+ASTternary_expression::codegen_artic(Symbol* dest)
+{
+    NOT_IMPLEMENTED;
+    return ASTNode::codegen_artic(dest);
+}
 
 
 
@@ -630,6 +688,12 @@ ASTcomma_operator::typecheck(TypeSpec expected)
     return m_typespec = typecheck_list(expr(), expected);
     // N.B. typecheck_list already returns the type of the LAST node in
     // the list, just like the comma operator is supposed to do.
+}
+Symbol*
+ASTcomma_operator::codegen_artic(Symbol* dest)
+{
+    NOT_IMPLEMENTED;
+    return ASTNode::codegen_artic(dest);
 }
 
 
@@ -644,6 +708,12 @@ TypeSpec ASTtypecast_expression::typecheck(TypeSpec /*expected*/)
         !(m_typespec.is_triple() && t.is_triple()))
         errorf("Cannot cast '%s' to '%s'", t, m_typespec);
     return m_typespec;
+}
+Symbol*
+ASTtypecast_expression::codegen_artic(Symbol* dest)
+{
+    NOT_IMPLEMENTED;
+    return ASTNode::codegen_artic(dest);
 }
 
 
@@ -719,6 +789,12 @@ ASTtype_constructor::typecheck(TypeSpec expected, bool report, bool bind)
         // valid combinations.
     }
     return TypeSpec();
+}
+Symbol*
+ASTtype_constructor::codegen_artic(Symbol* dest)
+{
+    NOT_IMPLEMENTED;
+    return ASTNode::codegen_artic(dest);
 }
 
 
@@ -1020,6 +1096,12 @@ ASTcompound_initializer::typecheck(TypeSpec expected, unsigned mode)
     }
 
     return m_typespec;
+}
+Symbol*
+ASTcompound_initializer::codegen_artic(Symbol* dest)
+{
+    NOT_IMPLEMENTED;
+    return ASTtype_constructor::codegen_artic(dest);
 }
 
 
