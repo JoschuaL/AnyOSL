@@ -790,12 +790,7 @@ ASTtype_constructor::typecheck(TypeSpec expected, bool report, bool bind)
     }
     return TypeSpec();
 }
-Symbol*
-ASTtype_constructor::codegen_artic(Symbol* dest)
-{
-    NOT_IMPLEMENTED;
-    return ASTNode::codegen_artic(dest);
-}
+
 
 
 class ASTcompound_initializer::TypeAdjuster {

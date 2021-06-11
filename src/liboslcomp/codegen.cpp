@@ -429,7 +429,7 @@ ASTshader_declaration::codegen_artic(Symbol*)
         // constant in the symbol definition, no need for ops.
 
         TypeSpec t = v->typespec();
-        std::cout << t.artic_string() << " " << v->name() << " = ";
+        std::cout << v->name() << ": " << t.artic_string() << " " << " = ";
         std::string out;
         if (!v->param_default_literals_artic(v->sym(), v->init().get(), out, ",")) {
             v->codegen_artic();
@@ -448,7 +448,7 @@ ASTshader_declaration::codegen_artic(Symbol*)
         // constant in the symbol definition, no need for ops.
 
         TypeSpec t = v->typespec();
-        std::cout << t.artic_string() << " " << v->name() << " = ";
+        std::cout << v->name() << ": " << t.artic_string() << " " << " = ";
         std::string out;
         if (!v->param_default_literals_artic(v->sym(), v->init().get(), out)) {
             v->codegen_artic();
@@ -928,10 +928,12 @@ ASTNode::one_default_literal_artic(const Symbol* sym, ASTNode* init,
         // No initializers for struct
         completed = false;
     } else if (type.is_int()) {
-        NOT_IMPLEMENTED;
-        if (islit && lit->typespec().is_int())
+        if (islit && lit->typespec().is_int()){
+            std::cout << std::to_string(lit->intval());
             out += Strutil::sprintf("%d", lit->intval());
+        }
         else {
+            std::cout << "0";
             out += "0";  // FIXME?
             completed = false;
         }
@@ -949,25 +951,24 @@ ASTNode::one_default_literal_artic(const Symbol* sym, ASTNode* init,
         }
     } else if (type.is_triple()) {
         if (type.is_point()) {
-            std::cout << "Point<";
+            std::cout << "Point";
         } else if (type.is_color()) {
-            std::cout << "Color<";
+            std::cout << "Color";
         } else if (type.is_normal()) {
-            std::cout << "Normal<";
+            std::cout << "Normal";
         } else {
-            std::cout << "Vector<";
+            std::cout << "Vector";
         }
 
         if (islit && lit->typespec().is_int()) {
-            std::string sign = lit->typespec().simpletype().is_signed() ? "i"
-                                                                        : "u";
-            std::cout << sign << "32>{";
+
+            std::cout << "{";
             float f = lit->intval();
             std::cout << f << sep << f << sep << f << "}";
             out += Strutil::sprintf("%.9g%s%.9g%s%.9g", f, sep, f, sep, f);
         } else if (islit && lit->typespec().is_float()) {
             float f = lit->floatval();
-            std::cout << "f32>{" << f << sep << f << sep << f << "}";
+            std::cout << "{" << f << sep << f << sep << f << "}";
             out += Strutil::sprintf("%.9g%s%.9g%s%.9g", f, sep, f, sep, f);
         } else if (init && init->typespec() == type
                    && (init->nodetype() == ASTNode::type_constructor_node
@@ -998,18 +999,18 @@ ASTNode::one_default_literal_artic(const Symbol* sym, ASTNode* init,
                 }
             }
             if (nargs == 1) {
-                std::cout << "f32>{" << f[0] << sep << f[0] << sep << f[0]
+                std::cout << "{" << f[0] << sep << f[0] << sep << f[0]
                           << "}";
                 out += Strutil::sprintf("%.9g%s%.9g%s%.9g", f[0], sep, f[0],
                                         sep, f[0]);
             } else {
-                std::cout << "f32>{" << f[0] << sep << f[1] << sep << f[2]
+                std::cout << "{" << f[0] << sep << f[1] << sep << f[2]
                           << "}";
                 out += Strutil::sprintf("%.9g%s%.9g%s%.9g", f[0], sep, f[1],
                                         sep, f[2]);
             }
         } else {
-            std::cout << "f32>{" << "0" << sep << "0" << sep << "0"
+            std::cout << "{" << "0" << sep << "0" << sep << "0"
                       << "}";
             out += Strutil::sprintf("0%s0%s0", sep, sep);
             completed = false;
@@ -1165,12 +1166,20 @@ ASTvariable_declaration::param_default_literals_artic(
     }
 
     bool completed = true;  // have we output the full initialization?
+    if(this->typespec().is_array()){
+        std::cout << "[";
+    }
     for (int i = 0; i == 0 || init; ++i, init = init->nextptr()) {
-        if (i)
+        if (i) {
+            std::cout << separator;
             out += separator;
+        }
         completed &= one_default_literal_artic(sym, init, out, separator);
         if (!compound || !init)
             break;
+    }
+    if(this->typespec().is_array()){
+        std::cout << "]";
     }
     return completed;
 }
@@ -1189,10 +1198,11 @@ Symbol*
 ASTvariable_declaration::codegen_artic(Symbol* dest)
 {
     if(!is_parameter()){
-        std::cout << "let " << this->name().string() << " = ";
+        std::cout << "let " << this->name().string();
     }
 
     if (init()){
+        std::cout << " = ";
         codegen_initializer_artic(init(), m_sym);
     }
     return m_sym;
@@ -1622,14 +1632,14 @@ ASTNode::codegen_initlist_artic(ASTNode::ref init, TypeSpec type, Symbol* sym)
 
         Symbol* dest = init->codegen_artic(sym);
         if (dest != sym) {
-            NOT_IMPLEMENTED;
+
             if (sym->typespec().is_array()) {
                 NOT_IMPLEMENTED;
                 // Array variable -- assign to the i-th element
                 dest = codegen_aassign(sym->typespec().elementtype(), dest, sym,
                                        nullptr, i);
             } else {
-                NOT_IMPLEMENTED;
+
                 // Non-array variable, just a simple assignment
                 emitcode("assign", sym, dest);
             }
@@ -2559,6 +2569,81 @@ ASTtype_constructor::codegen(Symbol* dest)
     } else
         emitcode(typespec().string().c_str(), argdest.size(),
                  (argdest.size()) ? &argdest[0] : NULL);
+    return dest;
+}
+
+Symbol*
+ASTtype_constructor::codegen_artic(Symbol* dest)
+{
+    if (dest == NULL || !equivalent(dest->typespec(), typespec()))
+        dest = m_compiler->make_temporary(typespec());
+
+    TypeSpec t = typespec();
+    std::cout << t.artic_string() << "{";
+    // Handle simple case of a triple constructed from 3 float literals
+    if (typespec().is_triple()) {
+        bool all_literals = true;
+        ASTNode::ref val  = args();
+        float f[3];
+        for (int c = 0; c < 3; ++c) {
+            if (val->nodetype() == ASTNode::literal_node
+                && (val->typespec().is_float() || val->typespec().is_int())) {
+                f[c] = ((ASTliteral*)val.get())->floatval();
+            }
+            else
+                all_literals = false;
+            if (val->next())
+                val = val->next();
+        }
+        if (all_literals) {
+            std::cout << std::to_string(f[0]) << ", " << std::to_string(f[1]) << ", " << std::to_string(f[2]) <<  "}";
+            return m_compiler->make_constant(typespec().simpletype(), f[0],
+                                             f[1], f[2]);
+        }
+        // Doesn't fit the pattern, drop to the usual case...
+    }
+
+    // Special case: construct float(float_expr) -- just put it directly
+    // in the dest.
+    Symbol* argevaldest = nullptr;
+    if (dest && typespec().is_float() && nchildren() == 1
+        && child(0)->typespec().is_float()) {
+        argevaldest = dest;
+    }
+
+    std::vector<Symbol*> argdest;
+    argdest.push_back(dest);
+    int nargs = 0;
+    for (ref a = args(); a; a = a->next(), ++nargs) {
+        Symbol* argval = a->codegen_artic(argevaldest);
+        std::cout << ", ";
+        if (argval->typespec().is_int() && !typespec().is_int()) {
+            // Coerce to float if it's an int
+            if (a->nodetype() == literal_node) {
+                // It's a literal int, so let's make a literal float
+                int i  = ((ASTliteral*)a.get())->intval();
+                argval = m_compiler->make_constant((float)i);
+            } else {
+                // General case
+                Symbol* tmp = argval;
+                argval = m_compiler->make_temporary(TypeSpec(TypeDesc::FLOAT));
+                emitcode("assign", argval, tmp);
+            }
+        }
+        argdest.push_back(argval);
+    }
+    if (nargs == 1 && argdest.size() == 2 && argdest[1] == dest) {
+        // Don't have to do anything, we already coaxed the one argument
+        // to show up in the requested destination. This can happen for
+        //    foo = float(float_expr)
+        // to avoid the extra needless copy.
+    } else if (nargs == 1) {
+        emitcode("assign", argdest.size(),
+                 (argdest.size()) ? &argdest[0] : NULL);
+    } else
+        emitcode(typespec().string().c_str(), argdest.size(),
+                 (argdest.size()) ? &argdest[0] : NULL);
+    std::cout << "}";
     return dest;
 }
 

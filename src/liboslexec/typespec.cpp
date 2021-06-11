@@ -16,10 +16,12 @@
 
 
 
+
 OSL_NAMESPACE_ENTER
 
 namespace pvt {  // OSL::pvt
 
+#define NOT_IMPLEMENTED do {std::cerr << "NOT IMPLEMENTED "; OSL_ASSERT(false); exit(3);} while(0)
 
 
 std::vector<std::shared_ptr<StructSpec>>&
@@ -160,16 +162,14 @@ TypeSpec::artic_string()
         start += "[";
 
         if (this->is_closure_array()) {
-            if(this->is_color_closure()){
-                start += "Closure<Color<f32>>";
-            } else {
-                start += "Closure<" + this->artic_simpletype() + ">";
-            }
+
+                start += "Closure";
+
 
         } else if (this->is_structure_array()) {
             start += this->structspec()->name().string();
         } else {
-            start += this->artic_simpletype();
+            start += this->elementtype().artic_simpletype();
         }
         if (this->is_sized_array()) {
             end += ";";
@@ -179,11 +179,9 @@ TypeSpec::artic_string()
         return start + end;
     } else {
         if (this->is_closure()) {
-            if(this->is_color_closure()){
-                return "Closure<Color<f32>>";
-            } else {
-                return "Closure<" + this->artic_simpletype() + ">";
-            }
+
+                return "Closure";
+
         } else if (this->is_structure()) {
             return this->structspec()->name().string();
         } else {
@@ -196,7 +194,7 @@ TypeSpec::artic_simpletype()
 {
     TypeDesc st       = this->simpletype();
     if(st.is_unknown()){
-        return "f32";
+        NOT_IMPLEMENTED;
     }
     std::string start = "";
     std::string end   = "";
@@ -207,26 +205,24 @@ TypeSpec::artic_simpletype()
             end += std::to_string(st.arraylen);
         }
         end += "]";
-    } else if (st.is_vec3(TypeDesc::FLOAT) || st.is_vec3(TypeDesc::INT)) {
-        if (st == TypeDesc::TypeColor) {
-            start += "Color<";
-            end += ">";
-        } else if (st == TypeDesc::TypePoint) {
-            start += "Point<";
-            end += ">";
-        } else if (st == TypeDesc::TypeVector) {
-            start += "Vector<";
-            end += ">";
-        } else if (st == TypeDesc::TypeNormal) {
-            start += "Normal<";
-            end += ">";
-        }
-    } else if(st == TypeDesc::TypeMatrix){
-        start += "Matrix<";
-        end += ">";
     }
 
-    if (st == TypeDesc::TypeString) {
+    if (st.elementtype().is_vec3(TypeDesc::FLOAT)) {
+        auto ste = st.elementtype();
+        if (ste == TypeDesc::TypeColor) {
+            start += "Color";
+        } else if (ste == TypeDesc::TypePoint) {
+            start += "Point";
+        } else if (ste == TypeDesc::TypeVector) {
+            start += "Vector";
+        } else if (ste == TypeDesc::TypeNormal) {
+            start += "Normal";
+        } else {
+            NOT_IMPLEMENTED;
+        }
+    } else if(st == TypeDesc::TypeMatrix){
+        start += "Matrix";
+    } else  if (st == TypeDesc::TypeString) {
         start += "String";
     }  else if (st.is_floating_point()) {
         start += "f32";
