@@ -37,8 +37,16 @@ class ArticSource {
 public:
     ArticSource(std::string indent_string)
         : m_indent(0), m_indent_string(std::move(indent_string)), m_code() {};
-    void add_source_with_indent(std::string code);
-    void add_source(std::string code);
+
+    template <typename ... Args>
+    void add_source_with_indent(std::string code, Args ... args);
+    void add_source_with_indent();
+
+    template <typename ... Args>
+    void add_source(std::string code, Args ... args);
+    void add_source();
+
+
     void newline();
     int push_indent();
     int pop_indent();
@@ -60,8 +68,13 @@ private:
 
 
 class ArticTranspiler {
-    ArticTranspiler(ArticSource source) : m_source(source) {}
+    ArticTranspiler(ArticSource source) : source(source) {}
 
+public:
+
+
+
+private:
     void dispatch_node(ASTNode::ref);
 
     void transpile_shader_declaration(ASTshader_declaration* node);
@@ -109,7 +122,7 @@ class ArticTranspiler {
     void transpile_literal_node(ASTliteral* node);
 
 
-    ArticSource m_source;
+    ArticSource source;
 };
 
 OSL_NAMESPACE_EXIT

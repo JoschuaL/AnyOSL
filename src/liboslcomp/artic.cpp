@@ -73,7 +73,7 @@ artic_string(TypeSpec typeSpec)
 
         start += artic_string(typeSpec.elementtype());
 
-        
+
         if (typeSpec.is_sized_array()) {
             end += ";";
             end += std::to_string(typeSpec.arraylength());
@@ -139,20 +139,31 @@ artic_simpletype(TypeDesc st)
     return start + end;
 }
 
-
-void
-ArticSource::add_source_with_indent(std::string code)
+template<typename ... Args>
+void ArticSource::add_source_with_indent(std::string code, Args ... args)
 {
     for (int i = 0; i < m_indent; i++) {
         m_code += m_indent_string;
     }
     m_code += code;
+    add_source(args...);
 }
-void
-ArticSource::add_source(std::string code)
+
+void ArticSource::add_source_with_indent(){
+    m_code += "\n";
+}
+
+template<typename ... Args>
+void ArticSource::add_source(std::string code, Args ... args)
 {
     m_code += code;
+    add_source(args...);
 }
+
+void ArticSource::add_source(){
+    m_code += "\n";
+}
+
 int
 ArticSource::push_indent()
 {
@@ -221,6 +232,111 @@ void
 ArticSource::integrate_temp_source(ArticSource&& articSource)
 {
     this->save_temp(std::move(articSource.m_code));
+}
+
+void ArticTranspiler::dispatch_node(ASTNode::ref n)
+{
+    auto node = n.get();
+    switch (node->nodetype()) {
+    case ASTNode::unknown_node:
+        NOT_IMPLEMENTED;
+        break;
+    case ASTNode::shader_declaration_node:
+        transpile_shader_declaration((ASTshader_declaration*) node);
+        break;
+    case ASTNode::function_declaration_node:
+        transpile_function_declaration((ASTfunction_declaration*) node);
+        break;
+    case ASTNode::variable_declaration_node:
+        transpile_variable_declaration((ASTvariable_declaration*) node);
+        break;
+    case ASTNode::compound_initializer_node:
+        transpile_compound_initializer((ASTcompound_initializer*) node);
+        break;
+    case ASTNode::variable_ref_node:
+        transpile_variable_ref((ASTvariable_ref*) node);
+        break;
+    case ASTNode::preincdec_node:
+        transpile_preincdec((ASTpreincdec*) node);
+        break;
+    case ASTNode::postincdec_node:
+        transpile_postincdec((ASTpostincdec*)node);
+        break;
+    case ASTNode::index_node:
+        transpile_index((ASTindex*) node);
+        break;
+    case ASTNode::structselect_node:
+        transpile_structureselection((ASTstructselect*) node);
+        break;
+    case ASTNode::conditional_statement_node:
+        transpile_conditional_statement((ASTconditional_statement*) node);
+        break;
+    case ASTNode::loop_statement_node:
+        transpile_loop_statement((ASTloop_statement*) node);
+        break;
+    case ASTNode::loopmod_statement_node:
+        transpile_loopmod_statement((ASTloopmod_statement*) node);
+        break;
+    case ASTNode::return_statement_node:
+        transpile_return_statement((ASTreturn_statement*) node);
+        break;
+    case ASTNode::binary_expression_node:
+        transpile_binary_expression((ASTbinary_expression*) node);
+        break;
+    case ASTNode::unary_expression_node:
+        transpile_unary_expression((ASTunary_expression*) node);
+        break;
+    case ASTNode::assign_expression_node:
+        transpile_assign_expression((ASTassign_expression*) node);
+        break;
+    case ASTNode::ternary_expression_node:
+        transpile_ternary_expression((ASTternary_expression *) node);
+        break;
+    case ASTNode::comma_operator_node:
+        transpile_comma_operator((ASTcomma_operator*) node);
+        break;
+    case ASTNode::typecast_expression_node:
+        transpile_typecast_expression((ASTtypecast_expression*) node);
+        break;
+    case ASTNode::type_constructor_node:
+        transpile_type_constructor((ASTtype_constructor*) node);
+        break;
+    case ASTNode::function_call_node:
+        transpile_function_call((ASTfunction_call*) node);
+        break;
+    case ASTNode::literal_node:
+        transpile_literal_node((ASTliteral*) node);
+        break;
+    case ASTNode::_last_node:
+        NOT_IMPLEMENTED;
+        break;
+    }
+}
+void
+ArticTranspiler::transpile_shader_declaration(ASTshader_declaration* node)
+{
+    source.add_source_with_indent("struct ", node->shadername().string(), "_in {");
+    source.push_indent();
+    std::vector<ASTvariable_declaration*> inputs = {};
+    std::vector<ASTvariable_declaration*> outputs = {};
+    for(ASTNode::ref f = node->formals(); f; f = f->next()){
+        auto v = (ASTvariable_declaration*) f.get();
+        if(v->is_output()){
+            outputs.push_back(v);
+        }
+        inputs.push_back(v);
+        source.add_source_with_indent(v->name().string(), ",");
+    }
+    source.pop_indent();
+    source.add_source_with_indent("}\n");
+
+    source.add_source_with_indent("fn make_", node->shadername().string(), "_in -> ", node->shadername().string(), "_in {");
+    source.push_indent();
+    for(auto v : inputs){
+        source.add_source_with_indent()
+    }
+
+
 }
 
 OSL_NAMESPACE_EXIT
