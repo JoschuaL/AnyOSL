@@ -93,9 +93,6 @@ public:
     ///
     std::string string() const;
 
-    const std::string artic_string();
-
-    const std::string artic_simpletype();
 
     /// Express the type as a string (char *).  This is safe, the caller
     /// is not responsible for freeing the characters.

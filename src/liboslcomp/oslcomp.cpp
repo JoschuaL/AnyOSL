@@ -466,9 +466,9 @@ OSLCompilerImpl::compile(string_view filename,
             write_dependency_file(filename);
 
         if (!error_encountered()) {
-            ArticSource artic_source("  ");
-            shader()->codegen_artic(artic_source);
-            artic_source.print();
+            //ArticSource artic_source("  ");
+            //shader()->codegen_artic(artic_source);
+            //artic_source.print();
             shader()->codegen();
             track_variable_dependencies();
             track_variable_lifetimes();
