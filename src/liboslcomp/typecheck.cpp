@@ -137,10 +137,10 @@ TypeSpec ASTpreincdec::typecheck(TypeSpec /*expected*/)
     return m_typespec;
 }
 Symbol*
-ASTpreincdec::codegen_artic(Symbol* dest)
+ASTpreincdec::codegen_artic(ArticSource& artic_source, Symbol* dest)
 {
     NOT_IMPLEMENTED;
-    return ASTNode::codegen_artic(dest);
+    return ASTNode::codegen_artic(artic_source, dest);
 }
 
 
@@ -155,10 +155,10 @@ TypeSpec ASTpostincdec::typecheck(TypeSpec /*expected*/)
     return m_typespec;
 }
 Symbol*
-ASTpostincdec::codegen_artic(Symbol* dest)
+ASTpostincdec::codegen_artic(ArticSource& artic_source, Symbol* dest)
 {
     NOT_IMPLEMENTED;
-    return ASTNode::codegen_artic(dest);
+    return ASTNode::codegen_artic(artic_source, dest);
 }
 
 
@@ -261,10 +261,10 @@ TypeSpec ASTconditional_statement::typecheck(TypeSpec /*expected*/)
     return m_typespec = TypeDesc(TypeDesc::NONE);
 }
 Symbol*
-ASTconditional_statement::codegen_artic(Symbol* dest)
+ASTconditional_statement::codegen_artic(ArticSource& artic_source, Symbol* dest)
 {
     NOT_IMPLEMENTED;
-    return ASTNode::codegen_artic(dest);
+    return ASTNode::codegen_artic(artic_source, dest);
 }
 
 
@@ -288,10 +288,10 @@ TypeSpec ASTloop_statement::typecheck(TypeSpec /*expected*/)
     return m_typespec = TypeDesc(TypeDesc::NONE);
 }
 Symbol*
-ASTloop_statement::codegen_artic(Symbol* dest)
+ASTloop_statement::codegen_artic(ArticSource& artic_source, Symbol* dest)
 {
     NOT_IMPLEMENTED;
-    return ASTNode::codegen_artic(dest);
+    return ASTNode::codegen_artic(artic_source, dest);
 }
 
 
@@ -303,10 +303,10 @@ TypeSpec ASTloopmod_statement::typecheck(TypeSpec /*expected*/)
     return m_typespec = TypeDesc(TypeDesc::NONE);
 }
 Symbol*
-ASTloopmod_statement::codegen_artic(Symbol* dest)
+ASTloopmod_statement::codegen_artic(ArticSource& artic_source, Symbol* dest)
 {
     NOT_IMPLEMENTED;
-    return ASTNode::codegen_artic(dest);
+    return ASTNode::codegen_artic(artic_source, dest);
 }
 
 
@@ -410,10 +410,10 @@ TypeSpec ASTreturn_statement::typecheck(TypeSpec /*expected*/)
     return TypeSpec();  // TODO: what should be returned here?
 }
 Symbol*
-ASTreturn_statement::codegen_artic(Symbol* dest)
+ASTreturn_statement::codegen_artic(ArticSource& artic_source, Symbol* dest)
 {
     NOT_IMPLEMENTED;
-    return ASTNode::codegen_artic(dest);
+    return ASTNode::codegen_artic(artic_source, dest);
 }
 
 
@@ -468,10 +468,10 @@ ASTunary_expression::typecheck(TypeSpec expected)
     return m_typespec;
 }
 Symbol*
-ASTunary_expression::codegen_artic(Symbol* dest)
+ASTunary_expression::codegen_artic(ArticSource& artic_source, Symbol* dest)
 {
     NOT_IMPLEMENTED;
-    return ASTNode::codegen_artic(dest);
+    return ASTNode::codegen_artic(artic_source, dest);
 }
 
 
@@ -635,7 +635,7 @@ ASTbinary_expression::typecheck(TypeSpec expected)
 }
 
 Symbol*
-ASTbinary_expression::codegen_logic_artic(Symbol* dest)
+ASTbinary_expression::codegen_logic_artic(ArticSource& artic_source, Symbol* dest)
 {
     NOT_IMPLEMENTED;
     return nullptr;
@@ -674,10 +674,10 @@ ASTternary_expression::typecheck(TypeSpec expected)
     return m_typespec;
 }
 Symbol*
-ASTternary_expression::codegen_artic(Symbol* dest)
+ASTternary_expression::codegen_artic(ArticSource& artic_source, Symbol* dest)
 {
     NOT_IMPLEMENTED;
-    return ASTNode::codegen_artic(dest);
+    return ASTNode::codegen_artic(artic_source, dest);
 }
 
 
@@ -690,10 +690,10 @@ ASTcomma_operator::typecheck(TypeSpec expected)
     // the list, just like the comma operator is supposed to do.
 }
 Symbol*
-ASTcomma_operator::codegen_artic(Symbol* dest)
+ASTcomma_operator::codegen_artic(ArticSource& artic_source, Symbol* dest)
 {
     NOT_IMPLEMENTED;
-    return ASTNode::codegen_artic(dest);
+    return ASTNode::codegen_artic(artic_source, dest);
 }
 
 
@@ -710,10 +710,10 @@ TypeSpec ASTtypecast_expression::typecheck(TypeSpec /*expected*/)
     return m_typespec;
 }
 Symbol*
-ASTtypecast_expression::codegen_artic(Symbol* dest)
+ASTtypecast_expression::codegen_artic(ArticSource& artic_source, Symbol* dest)
 {
     NOT_IMPLEMENTED;
-    return ASTNode::codegen_artic(dest);
+    return ASTNode::codegen_artic(artic_source, dest);
 }
 
 
@@ -1093,10 +1093,10 @@ ASTcompound_initializer::typecheck(TypeSpec expected, unsigned mode)
     return m_typespec;
 }
 Symbol*
-ASTcompound_initializer::codegen_artic(Symbol* dest)
+ASTcompound_initializer::codegen_artic(ArticSource& artic_source, Symbol* dest)
 {
     NOT_IMPLEMENTED;
-    return ASTtype_constructor::codegen_artic(dest);
+    return ASTtype_constructor::codegen_artic(artic_source, dest);
 }
 
 

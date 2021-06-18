@@ -4,6 +4,7 @@
 
 dist
 build
+build2
 *~
 \#*\#
 *.pyc

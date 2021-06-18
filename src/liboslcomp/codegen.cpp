@@ -346,13 +346,13 @@ ASTNode::codegen_list(ref node, Symbol* dest)
 }
 
 Symbol*
-ASTNode::codegen_list_artic(ASTNode::ref node, Symbol* dest)
+ASTNode::codegen_list_artic(ArticSource& artic_source, ASTNode::ref node, Symbol* dest)
 {
     Symbol* sym = NULL;
     while (node) {
         bool last = (node->nextptr() == NULL);
-        sym       = node->codegen_artic(last ? dest : NULL);
-        std::cout << ";" << std::endl;
+        sym       = node->codegen_artic(artic_source, last ? dest : NULL);
+        artic_source.add_source(";");
         node      = node->next();
     }
     return sym;
@@ -406,14 +406,18 @@ ASTshader_declaration::codegen(Symbol*)
 }
 
 Symbol*
-ASTshader_declaration::codegen_artic(Symbol*)
+ASTshader_declaration::codegen_artic(ArticSource& artic_source, Symbol*)
 {
     auto name = this->shadername();
+    std::vector<std::string> in_names = {};
+    std::vector<std::string> out_names = {};
 
 
-
-    std::cout << "struct " << name << "_in {" << std::endl;
+    artic_source.add_source_with_indent("struct " + name.string() + "_in {\n");
+    artic_source.save_temp_with_indent("fn make_" + name.string() + "_in -> " + name.string() + "_in{\n");
     //NOT_IMPLEMENTED;
+    artic_source.push_indent();
+
 
     std::vector<ref> outputs = {};
     for (ref f = formals(); f; f = f->next()) {
@@ -429,44 +433,75 @@ ASTshader_declaration::codegen_artic(Symbol*)
         // constant in the symbol definition, no need for ops.
 
         TypeSpec t = v->typespec();
-        std::cout << v->name() << ": " << t.artic_string() << " " << " = ";
+        in_names.push_back(v->name().string());
+        artic_source.add_source_with_indent(v->name().string());
+        artic_source.save_temp_with_indent("let " + v->name().string() + ": " + t.artic_string() + " = ");
         std::string out;
-        if (!v->param_default_literals_artic(v->sym(), v->init().get(), out, ",")) {
-            v->codegen_artic();
+        ArticSource artic_source_temp = artic_source.make_temp_source();
+        if (!v->param_default_literals_artic(artic_source_temp, v->sym(), v->init().get(), out, ",")) {
+            artic_source_temp.pop_temp_characters(2);
+            v->codegen_artic(artic_source_temp);
         }
-        std::cout << "," << std::endl;
+        artic_source.integrate_temp_source(std::move(artic_source_temp));
+        artic_source.save_temp(";\n");
+        artic_source.add_source(",\n");
     }
-
-    std::cout << "}" << std::endl
-              << std::endl
-              << "struct " << name << "_out {" << std::endl;
+    artic_source.save_temp_with_indent(name.string() + "{\n");
+    artic_source.push_indent();
+    for(const auto& in_name: in_names){
+        artic_source.save_temp_with_indent(in_name + " = " + in_name + ",\n");
+    }
+    artic_source.pop_indent();
+    artic_source.save_temp_with_indent("}\n");
+    artic_source.pop_indent();
+    artic_source.save_temp_with_indent("}\n");
+    artic_source.add_source_with_indent("}\n\nstruct " + name.string() + "_out {\n" );
+    artic_source.save_temp_with_indent("fn make_" + name.string() + "_out -> " + name.string() + "_out{\n");
+    artic_source.save_temp("");
+    artic_source.push_indent();
     for (auto&& f : outputs) {
         OSL_DASSERT(f->nodetype() == ASTNode::variable_declaration_node);
         ASTvariable_declaration* v = (ASTvariable_declaration*)f.get();
+
         OSL_DASSERT(v->init());  // Shader formals MUST have initializers
         // If the initializer is a literal and we output it as a
         // constant in the symbol definition, no need for ops.
 
         TypeSpec t = v->typespec();
-        std::cout << v->name() << ": " << t.artic_string() << " " << " = ";
+        out_names.push_back(v->name().string());
+        artic_source.add_source_with_indent(v->name().string());
+        artic_source.save_temp_with_indent("let " + v->name().string() + ": " + t.artic_string() + " = ");
         std::string out;
-        if (!v->param_default_literals_artic(v->sym(), v->init().get(), out)) {
-            v->codegen_artic();
+        ArticSource artic_source_temp = artic_source.make_temp_source();
+        if (!v->param_default_literals_artic(artic_source_temp, v->sym(), v->init().get(), out, ",")) {
+            artic_source_temp.pop_temp_characters(2);
+            v->codegen_artic(artic_source_temp);
         }
-        std::cout << "," << std::endl;
+        artic_source.integrate_temp_source(std::move(artic_source_temp));
+        artic_source.save_temp(";\n");
+        artic_source.add_source(",\n");
     }
+    artic_source.save_temp_with_indent(name.string() + "{\n");
+    artic_source.push_indent();
+    for(const auto& out_name: out_names){
+        artic_source.save_temp_with_indent(out_name + " = " + out_name + ",\n");
+    }
+    artic_source.pop_indent();
+    artic_source.save_temp_with_indent("}\n");
+    artic_source.pop_indent();
+    artic_source.save_temp_with_indent("}\n");
+    artic_source.add_source("}\n\n");
 
-    std::cout << "}" << std::endl << std::endl;
+    artic_source.add_source(artic_source.pop_temp());
 
-    std::cout << "fn " << name << "_impl(in: " << name << "_in, out: " << name
-              << "_out) {" << std::endl;
+    artic_source.add_source("fn " + name.string() + "_impl(in: " + name.string() + "_in, out: " + name.string() + "_out) {\n"  );
+
+
+
 
     m_compiler->codegen_method(m_compiler->main_method_name());
-    codegen_list_artic(statements());
-    std::cout << "out" << std::endl;
-
-
-    std::cout << "}" << std::endl;
+    codegen_list_artic(artic_source, statements());
+    artic_source.add_source("out\n}\n");
     return NULL;
 }
 
@@ -615,7 +650,7 @@ ASTassign_expression::codegen(Symbol* dest)
     return dest;
 }
 
-Symbol* ASTassign_expression::codegen_artic(Symbol *dest){
+Symbol* ASTassign_expression::codegen_artic(ArticSource& artic_source, Symbol *dest){
 
     OSL_DASSERT(m_op == Assign);  // all else handled by binary_op
 
@@ -628,22 +663,22 @@ Symbol* ASTassign_expression::codegen_artic(Symbol *dest){
     } else if (var()->nodetype() == structselect_node) {
         NOT_IMPLEMENTED;
         if (!((ASTstructselect*)var().get())->compindex())
-            dest = var()->codegen_artic();
+            dest = var()->codegen_artic(artic_source);
         // ^^ N.B. don't do the extra codegen of the destination if this
         // is the kind of structselect that is really an assignment to a
         // named component (P.x = ...).
     } else {
-        dest = var()->codegen_artic();
+        dest = var()->codegen_artic(artic_source);
     }
-    std::cout << " = ";
-    Symbol* operand = expr()->codegen_artic(dest);
+    artic_source.add_source(" = ");
+    Symbol* operand = expr()->codegen_artic(artic_source, dest);
         OSL_DASSERT(operand != NULL);
 
     if (typespec().is_structure_array()) {
         // Assign entire array-of-struct to another array-of-struct
         if (operand != dest) {
             StructSpec* structspec = typespec().structspec();
-            codegen_assign_struct_artic(structspec, ustring(dest->mangled()),
+            codegen_assign_struct_artic(artic_source, structspec, ustring(dest->mangled()),
                                   ustring(operand->mangled()), NULL, true, 0,
                                   false /*not a shader param init*/);
         }
@@ -654,20 +689,20 @@ Symbol* ASTassign_expression::codegen_artic(Symbol *dest){
         // Assignment of struct copies each element individually
         if (operand != dest) {
             StructSpec* structspec = typespec().structspec();
-            Symbol* arrayindex     = index ? index->index()->codegen_artic() : NULL;
+            Symbol* arrayindex     = index ? index->index()->codegen_artic(artic_source) : NULL;
             if (arrayindex) {
                 // Special case -- assignment to a element of an array of
                 // structs.  Beware the temp that may have been created above,
                 // instead refer back to the original.
-                Symbol* v = index->lvalue()->codegen_artic();
-                codegen_assign_struct_artic(structspec, ustring(v->mangled()),
+                Symbol* v = index->lvalue()->codegen_artic(artic_source);
+                codegen_assign_struct_artic(artic_source, structspec, ustring(v->mangled()),
                                       ustring(operand->mangled()), arrayindex,
                                       false, -1 /* means we don't know */,
                                       false /*not a shader param init*/);
             } else {
                 // Assignment of one scalar struct to another scalar struct
                     OSL_DASSERT(dest);
-                codegen_assign_struct_artic(structspec, ustring(dest->mangled()),
+                codegen_assign_struct_artic(artic_source, structspec, ustring(dest->mangled()),
                                       ustring(operand->mangled()), NULL, true,
                                       0, false /*not a shader param init*/);
             }
@@ -677,12 +712,12 @@ Symbol* ASTassign_expression::codegen_artic(Symbol *dest){
 
     if (var()->nodetype() == structselect_node) {
         ASTstructselect* ss = (ASTstructselect*)var().get();
-        ss->codegen_assign_artic(dest, operand);
+        ss->codegen_assign_artic(artic_source, dest, operand);
         return dest;
     }
 
     if (index) {
-        index->codegen_assign_artic(operand);
+        index->codegen_assign_artic(artic_source, operand);
         dest = operand;  // so transitive assignment works for array refs
     } else if (operand != dest) {
         emitcode(typespec().is_array() ? "arraycopy" : "assign", dest, operand);
@@ -911,7 +946,7 @@ ASTNode::one_default_literal(const Symbol* sym, ASTNode* init, std::string& out,
 }
 
 bool
-ASTNode::one_default_literal_artic(const Symbol* sym, ASTNode* init,
+ASTNode::one_default_literal_artic(ArticSource& artic_source, const Symbol* sym, ASTNode* init,
                                    std::string& out, string_view sep) const
 {
     // FIXME -- this only works for single values or arrays made of
@@ -929,46 +964,50 @@ ASTNode::one_default_literal_artic(const Symbol* sym, ASTNode* init,
         completed = false;
     } else if (type.is_int()) {
         if (islit && lit->typespec().is_int()){
-            std::cout << std::to_string(lit->intval());
+            artic_source.add_source(std::to_string(lit->intval()));
             out += Strutil::sprintf("%d", lit->intval());
         }
         else {
-            std::cout << "0";
+            artic_source.add_source("0");
             out += "0";  // FIXME?
             completed = false;
         }
     } else if (type.is_float()) {
         if (islit && lit->typespec().is_int()){
-            std::cout << std::to_string(lit->intval());
+            artic_source.add_source(std::to_string(lit->intval()));
             out += Strutil::sprintf("%d", lit->intval());}
         else if (islit && lit->typespec().is_float()){
-            std::cout << std::to_string(lit->floatval());
+            artic_source.add_source(std::to_string(lit->floatval()));
             out += Strutil::sprintf("%.9g", lit->floatval());}
         else {
-            std::cout << "0";
+            artic_source.add_source("0");
             out += "0";  // FIXME?
             completed = false;
         }
     } else if (type.is_triple()) {
+        std::string x = "x", y = "y", z = "z";
         if (type.is_point()) {
-            std::cout << "Point";
+            artic_source.add_source("Point");
         } else if (type.is_color()) {
-            std::cout << "Color";
+            artic_source.add_source("Color");
+            x = "r";
+            y = "g";
+            z = "b";
         } else if (type.is_normal()) {
-            std::cout << "Normal";
+            artic_source.add_source("Normal");
         } else {
-            std::cout << "Vector";
+            artic_source.add_source("Vector");
         }
 
         if (islit && lit->typespec().is_int()) {
-
-            std::cout << "{";
+            artic_source.add_source("{");
             float f = lit->intval();
-            std::cout << f << sep << f << sep << f << "}";
+            artic_source.add_source(x + " = " + std::to_string(f) + sep.str() + std::to_string(f)  + y + " = " + sep.str() + z + " = " + std::to_string(f) + "}");
             out += Strutil::sprintf("%.9g%s%.9g%s%.9g", f, sep, f, sep, f);
         } else if (islit && lit->typespec().is_float()) {
+            artic_source.add_source("{");
             float f = lit->floatval();
-            std::cout << "{" << f << sep << f << sep << f << "}";
+            artic_source.add_source(x + " = " + std::to_string(f) + sep.str() + std::to_string(f)  + y + " = " + sep.str() + z + " = " + std::to_string(f) + "}");
             out += Strutil::sprintf("%.9g%s%.9g%s%.9g", f, sep, f, sep, f);
         } else if (init && init->typespec() == type
                    && (init->nodetype() == ASTNode::type_constructor_node
@@ -999,19 +1038,18 @@ ASTNode::one_default_literal_artic(const Symbol* sym, ASTNode* init,
                 }
             }
             if (nargs == 1) {
-                std::cout << "{" << f[0] << sep << f[0] << sep << f[0]
-                          << "}";
+                artic_source.add_source("{" + x + " = " + std::to_string(f[0]) + sep.str() + y + " = " + std::to_string(f[0]) + sep.str() + z + " = " + std::to_string(f[0])
+                          + "}");
                 out += Strutil::sprintf("%.9g%s%.9g%s%.9g", f[0], sep, f[0],
                                         sep, f[0]);
             } else {
-                std::cout << "{" << f[0] << sep << f[1] << sep << f[2]
-                          << "}";
+                artic_source.add_source("{" + x + " = " + std::to_string(f[0]) + sep.str() + y + " = " + std::to_string(f[1]) + sep.str() + z + " = " + std::to_string(f[2])
+                                            + "}");
                 out += Strutil::sprintf("%.9g%s%.9g%s%.9g", f[0], sep, f[1],
                                         sep, f[2]);
             }
         } else {
-            std::cout << "{" << "0" << sep << "0" << sep << "0"
-                      << "}";
+            artic_source.add_source("{" + x + " = 0"  + sep.str() + y + " = 0" + sep.str() + z + " = 0" + "}");
             out += Strutil::sprintf("0%s0%s0", sep, sep);
             completed = false;
         }
@@ -1132,6 +1170,7 @@ ASTvariable_declaration::param_default_literals(const Symbol* sym,
 
 bool
 ASTvariable_declaration::param_default_literals_artic(
+    ArticSource& artic_source,
     const Symbol* sym, ASTNode* init, std::string& out,
     string_view separator) const
 {
@@ -1167,19 +1206,19 @@ ASTvariable_declaration::param_default_literals_artic(
 
     bool completed = true;  // have we output the full initialization?
     if(this->typespec().is_array()){
-        std::cout << "[";
+        artic_source.add_source("[");
     }
     for (int i = 0; i == 0 || init; ++i, init = init->nextptr()) {
         if (i) {
-            std::cout << separator;
+            artic_source.add_source(separator);
             out += separator;
         }
-        completed &= one_default_literal_artic(sym, init, out, separator);
+        completed &= one_default_literal_artic(artic_source, sym, init, out, separator);
         if (!compound || !init)
             break;
     }
     if(this->typespec().is_array()){
-        std::cout << "]";
+        artic_source.add_source("]");
     }
     return completed;
 }
@@ -1195,15 +1234,15 @@ ASTvariable_declaration::codegen(Symbol* /*dst*/)
 }
 
 Symbol*
-ASTvariable_declaration::codegen_artic(Symbol* dest)
+ASTvariable_declaration::codegen_artic(ArticSource& artic_source, Symbol* dest)
 {
     if(!is_parameter()){
-        std::cout << "let " << this->name().string();
+        artic_source.add_source("let " + this->name().string());
     }
 
     if (init()){
-        std::cout << " = ";
-        codegen_initializer_artic(init(), m_sym);
+        artic_source.add_source(" = ");
+        codegen_initializer_artic(artic_source, init(), m_sym);
     }
     return m_sym;
 }
@@ -1251,7 +1290,7 @@ ASTvariable_declaration::codegen_initializer(ref init, Symbol* sym)
     }
 }
 void
-ASTvariable_declaration::codegen_initializer_artic(ASTNode::ref init,
+ASTvariable_declaration::codegen_initializer_artic(ArticSource& artic_source, ASTNode::ref init,
                                                    Symbol* sym)
 {
     if (typespec().is_structure()) {
@@ -1290,7 +1329,7 @@ ASTvariable_declaration::codegen_initializer_artic(ASTNode::ref init,
                 return;
             }
         }
-        codegen_initlist_artic(init, m_typespec, m_sym);
+        codegen_initlist_artic(artic_source, init, m_typespec, m_sym);
     }
 
 }
@@ -1478,7 +1517,7 @@ ASTNode::codegen_initlist(ref init, TypeSpec type, Symbol* sym)
 }
 
 void
-ASTNode::codegen_initlist_artic(ASTNode::ref init, TypeSpec type, Symbol* sym)
+ASTNode::codegen_initlist_artic(ArticSource& artic_source, ASTNode::ref init, TypeSpec type, Symbol* sym)
 {
     // If we're doing this initialization for shader params for their
     // init ops, we need to take care to set the codegen method names
@@ -1630,7 +1669,7 @@ ASTNode::codegen_initlist_artic(ASTNode::ref init, TypeSpec type, Symbol* sym)
             break;
         }
 
-        Symbol* dest = init->codegen_artic(sym);
+        Symbol* dest = init->codegen_artic(artic_source, sym);
         if (dest != sym) {
 
             if (sym->typespec().is_array()) {
@@ -1760,14 +1799,14 @@ ASTvariable_ref::codegen(Symbol*)
 }
 
 Symbol*
-ASTvariable_ref::codegen_artic(Symbol* dest)
+ASTvariable_ref::codegen_artic(ArticSource& artic_source, Symbol* dest)
 {
     if(this->sym()->symtype() == SymTypeOutputParam){
-        std::cout << "out.";
+        artic_source.add_source("out.");
     } else if(this->sym()->symtype() == SymTypeParam){
-        std::cout << "in.";
+        artic_source.add_source("in.");
     }
-    std::cout << m_sym->name();
+    artic_source.add_source(m_sym->name().string());
 
     return m_sym;
 }
@@ -1923,7 +1962,7 @@ ASTindex::codegen_assign(Symbol* src, Symbol* ind, Symbol* ind2, Symbol* ind3)
 }
 
 void
-ASTindex::codegen_assign_artic(Symbol* src, Symbol* ind, Symbol* ind2, Symbol* ind3)
+ASTindex::codegen_assign_artic(ArticSource& artic_source, Symbol* src, Symbol* ind, Symbol* ind2, Symbol* ind3)
 {
     NOT_IMPLEMENTED;
     Symbol* lv = lvalue()->codegen();
@@ -1962,10 +2001,10 @@ ASTindex::codegen_assign_artic(Symbol* src, Symbol* ind, Symbol* ind2, Symbol* i
 
 
 Symbol*
-ASTindex::codegen_artic(Symbol* dest)
+ASTindex::codegen_artic(ArticSource& artic_source, Symbol* dest)
 {
     NOT_IMPLEMENTED;
-    return ASTNode::codegen_artic(dest);
+    return ASTNode::codegen_artic(artic_source, dest);
 }
 
 
@@ -2015,7 +2054,7 @@ ASTstructselect::codegen_assign(Symbol* dest, Symbol* src)
 }
 
 void
-ASTstructselect::codegen_assign_artic(Symbol* dest, Symbol* src)
+ASTstructselect::codegen_assign_artic(ArticSource& artic_source, Symbol* dest, Symbol* src)
 {
     NOT_IMPLEMENTED;
 }
@@ -2057,10 +2096,10 @@ ASTstructselect::codegen_index()
     return indexsym;
 }
 Symbol*
-ASTstructselect::codegen_artic(Symbol* dest)
+ASTstructselect::codegen_artic(ArticSource& artic_source, Symbol* dest)
 {
     NOT_IMPLEMENTED;
-    return ASTNode::codegen_artic(dest);
+    return ASTNode::codegen_artic(artic_source, dest);
 }
 
 
@@ -2318,14 +2357,14 @@ std::string artic_type_string_to_string(TypeSpec typeSpec){
 }
 
 Symbol*
-ASTbinary_expression::codegen_artic(Symbol* dest)
+ASTbinary_expression::codegen_artic(ArticSource& artic_source, Symbol* dest)
 {
     {
-        std::cout << "ops_" << artic_type_string_to_string(this->typespec()) << "." << op_to_string(this->m_op) << "(";
-        left()->codegen_artic();
-        std::cout << ", ";
-        right()->codegen_artic();
-        std::cout << ")";
+        artic_source.add_source("ops_" + artic_type_string_to_string(this->typespec()) + op_to_string(this->m_op) + "(");
+        left()->codegen_artic(artic_source);
+        artic_source.add_source(", ");
+        right()->codegen_artic(artic_source);
+        artic_source.add_source(")");
     }
 
     if (m_function_overload) {
@@ -2353,7 +2392,7 @@ ASTbinary_expression::codegen_artic(Symbol* dest)
 
     // Special case for logic ops that short-circuit
     if (m_op == And || m_op == Or)
-        return codegen_logic_artic(dest);
+        return codegen_logic_artic(artic_source, dest);
 
     Symbol* lsym = left()->codegen();
     Symbol* rsym = right()->codegen();
@@ -2573,13 +2612,13 @@ ASTtype_constructor::codegen(Symbol* dest)
 }
 
 Symbol*
-ASTtype_constructor::codegen_artic(Symbol* dest)
+ASTtype_constructor::codegen_artic(ArticSource& artic_source, Symbol* dest)
 {
     if (dest == NULL || !equivalent(dest->typespec(), typespec()))
         dest = m_compiler->make_temporary(typespec());
 
     TypeSpec t = typespec();
-    std::cout << t.artic_string() << "{";
+    artic_source.add_source(t.artic_string() + "{");
     // Handle simple case of a triple constructed from 3 float literals
     if (typespec().is_triple()) {
         bool all_literals = true;
@@ -2596,7 +2635,7 @@ ASTtype_constructor::codegen_artic(Symbol* dest)
                 val = val->next();
         }
         if (all_literals) {
-            std::cout << std::to_string(f[0]) << ", " << std::to_string(f[1]) << ", " << std::to_string(f[2]) <<  "}";
+            artic_source.add_source(std::to_string(f[0]) + ", " + std::to_string(f[1]) + ", " + std::to_string(f[2]) +  "}");
             return m_compiler->make_constant(typespec().simpletype(), f[0],
                                              f[1], f[2]);
         }
@@ -2615,8 +2654,8 @@ ASTtype_constructor::codegen_artic(Symbol* dest)
     argdest.push_back(dest);
     int nargs = 0;
     for (ref a = args(); a; a = a->next(), ++nargs) {
-        Symbol* argval = a->codegen_artic(argevaldest);
-        std::cout << ", ";
+        Symbol* argval = a->codegen_artic(artic_source, argevaldest);
+        artic_source.add_source(", ");
         if (argval->typespec().is_int() && !typespec().is_int()) {
             // Coerce to float if it's an int
             if (a->nodetype() == literal_node) {
@@ -2643,7 +2682,7 @@ ASTtype_constructor::codegen_artic(Symbol* dest)
     } else
         emitcode(typespec().string().c_str(), argdest.size(),
                  (argdest.size()) ? &argdest[0] : NULL);
-    std::cout << "}";
+    artic_source.add_source("}");
     return dest;
 }
 
@@ -2846,9 +2885,9 @@ ASTfunction_call::codegen(Symbol* dest)
 }
 
 Symbol*
-ASTfunction_call::codegen_artic(Symbol* dest)
+ASTfunction_call::codegen_artic(ArticSource& artic_source, Symbol* dest)
 {
-    std::cout << m_name << "(";
+    artic_source.add_source(m_name.string() + "(");
 
     if (is_struct_ctr()) {
         codegen_struct_initializers(args(), dest, true /*is_constructor*/);
@@ -2886,13 +2925,13 @@ ASTfunction_call::codegen_artic(Symbol* dest)
     for (int i = 0; a; a = a->nextptr(), ++i) {
         //NOT_IMPLEMENTED;
         if(i){
-            std::cout << ", ";
+            artic_source.add_source(", ");
         }
         TypeSpec formaltype = (i < (int)polyargs.size())
                               ? polyargs[i]
                               : TypeSpec(TypeDesc::UNKNOWN);
         bool writearg       = argwrite(i + returnarg);
-        codegen_arg_artic(argdest, index, index2, index3, i, a, form, formaltype,
+        codegen_arg_artic(artic_source, argdest, index, index2, index3, i, a, form, formaltype,
                     writearg, indexed_output_params);
 
 
@@ -3018,7 +3057,7 @@ ASTfunction_call::codegen_artic(Symbol* dest)
             }
         }
     }
-    std::cout << ")";
+    artic_source.add_source(")");
     return dest;
 }
 
@@ -3085,7 +3124,7 @@ ASTfunction_call::codegen_arg(SymbolPtrVec& argdest, SymbolPtrVec& index1,
 }
 
 void
-ASTfunction_call::codegen_arg_artic(SymbolPtrVec& argdest, SymbolPtrVec& index1,
+ASTfunction_call::codegen_arg_artic(ArticSource& artic_source, SymbolPtrVec& argdest, SymbolPtrVec& index1,
                                     SymbolPtrVec& index2, SymbolPtrVec& index3,
                                     int argnum, ASTNode* arg, ASTNode* form,
                                     const TypeSpec& formaltype, bool writearg,
@@ -3117,7 +3156,7 @@ ASTfunction_call::codegen_arg_artic(SymbolPtrVec& argdest, SymbolPtrVec& index1,
         indexed_output_params = true;
     } else {
         // Anything else
-        thisarg = arg->codegen_artic();
+        thisarg = arg->codegen_artic(artic_source);
     }
     // Handle type coercion of the argument
     if (!is_struct && formaltype.simpletype() != TypeDesc(TypeDesc::UNKNOWN)
@@ -3186,18 +3225,18 @@ ASTliteral::codegen(Symbol* /*dest*/)
     return nullptr;
 }
 Symbol*
-ASTliteral::codegen_artic(Symbol* dest)
+ASTliteral::codegen_artic(ArticSource& artic_source, Symbol* dest)
 {
 
     TypeSpec t = typespec();
     if (t.is_string()){
-        std::cout << "String::" << ustrval().string();
+        artic_source.add_source("String::" + ustrval().string());
         return m_compiler->make_constant(ustring(strval()));}
     if (t.is_int()){
-        std::cout << intval();
+        artic_source.add_source(std::to_string(intval()));
         return m_compiler->make_constant(intval());}
     if (t.is_float()){
-        std::cout << std::to_string(floatval());
+        artic_source.add_source(std::to_string(floatval()));
         return m_compiler->make_constant(floatval());}
     OSL_DASSERT(0 && "Don't know how to generate code for this literal");
     return nullptr;

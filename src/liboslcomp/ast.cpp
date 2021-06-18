@@ -1037,38 +1037,38 @@ ASTNode::check_symbol_writeability(ASTNode* var)
     return true;
 }
 Symbol*
-ASTNode::codegen_artic(Symbol* dest)
+ASTNode::codegen_artic(ArticSource& artic_source, Symbol* dest)
 {
     NOT_IMPLEMENTED;
     return nullptr;
 }
 Symbol*
-ASTNode::codegen_int_artic(Symbol* dest, bool boolify, bool invert)
+ASTNode::codegen_int_artic(ArticSource& artic_source, Symbol* dest, bool boolify, bool invert)
 {
     NOT_IMPLEMENTED;
     return nullptr;
 }
 
 void
-ASTNode::codegen_children_artic()
+ASTNode::codegen_children_artic(ArticSource& artic_source)
 {
     NOT_IMPLEMENTED;
 }
 int
-ASTNode::emitcode_artic(const char* opname, Symbol* arg0, Symbol* arg1,
+ASTNode::emitcode_artic(ArticSource& artic_source, const char* opname, Symbol* arg0, Symbol* arg1,
                         Symbol* arg2, Symbol* arg3)
 {
     NOT_IMPLEMENTED;
     return 0;
 }
 int
-ASTNode::emitcode_artic(const char* opname, size_t nargs, Symbol** args)
+ASTNode::emitcode_artic(ArticSource& artic_source, const char* opname, size_t nargs, Symbol** args)
 {
     NOT_IMPLEMENTED;
     return 0;
 }
 void
-ASTNode::codegen_assign_struct_artic(StructSpec* structspec, ustring dstsym,
+ASTNode::codegen_assign_struct_artic(ArticSource& artic_source, StructSpec* structspec, ustring dstsym,
                                      ustring srcsym, Symbol* arrayindex,
                                      bool copywholearrays, int intindex,
                                      bool paraminit)
@@ -1077,14 +1077,14 @@ ASTNode::codegen_assign_struct_artic(StructSpec* structspec, ustring dstsym,
 }
 
 Symbol*
-ASTNode::codegen_struct_initializers_artic(ASTNode::ref init, Symbol* sym,
+ASTNode::codegen_struct_initializers_artic(ArticSource& artic_source, ASTNode::ref init, Symbol* sym,
                                            bool is_constructor,
                                            Symbol* arrayindex)
 {
     NOT_IMPLEMENTED;
 }
 Symbol*
-ASTNode::codegen_aassign_artic(TypeSpec elemtype, Symbol* src, Symbol* lval,
+ASTNode::codegen_aassign_artic(ArticSource& artic_source, TypeSpec elemtype, Symbol* src, Symbol* lval,
                                Symbol* index, int i)
 {
     NOT_IMPLEMENTED;
