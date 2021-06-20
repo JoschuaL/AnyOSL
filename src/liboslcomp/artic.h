@@ -39,12 +39,16 @@ public:
         : m_indent(0), m_indent_string(std::move(indent_string)), m_code() {};
 
     template <typename ... Args>
-    void add_source_with_indent(std::string code, Args ... args);
-    void add_source_with_indent();
+    void add_source_with_indent(const std::string& code, Args ... args);
+
+
 
     template <typename ... Args>
-    void add_source(std::string code, Args ... args);
-    void add_source();
+    void add_source(const std::string& code, Args ... args);
+    inline void add_source(){};
+
+
+
 
 
     void newline();
@@ -120,6 +124,9 @@ private:
     void transpile_function_call(ASTfunction_call* node);
 
     void transpile_literal_node(ASTliteral* node);
+
+    void transpile_statement_list(ASTNode::ref node);
+
 
 
     ArticSource source;
