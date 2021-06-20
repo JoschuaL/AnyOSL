@@ -9,6 +9,7 @@
 #include <string>
 #include <utility>
 #include "ast.h"
+#include <unordered_set>
 
 OSL_NAMESPACE_ENTER
 
@@ -128,9 +129,15 @@ private:
 
     void transpile_statement_list(ASTNode::ref node);
 
+    std::string get_arg_name(TypeSpec typeSpec, int argnum);
+
+    void add_string_constant(const std::string& s);
+
 
 
     ArticSource source;
+
+    std::unordered_set<std::string> const_strings = {};
 };
 
 OSL_NAMESPACE_EXIT

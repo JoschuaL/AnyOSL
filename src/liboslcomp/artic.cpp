@@ -139,8 +139,9 @@ artic_simpletype(TypeDesc st)
     return start + end;
 }
 
-template<typename ... Args>
-void ArticSource::add_source_with_indent(const std::string& code, Args ... args)
+template<typename... Args>
+void
+ArticSource::add_source_with_indent(const std::string& code, Args... args)
 {
     for (int i = 0; i < m_indent; i++) {
         m_code += m_indent_string;
@@ -150,8 +151,9 @@ void ArticSource::add_source_with_indent(const std::string& code, Args ... args)
 
 
 
-template<typename ... Args>
-void ArticSource::add_source(const std::string& code, Args ... args)
+template<typename... Args>
+void
+ArticSource::add_source(const std::string& code, Args... args)
 {
     m_code += code;
     add_source(args...);
@@ -229,82 +231,77 @@ ArticSource::integrate_temp_source(ArticSource&& articSource)
     this->save_temp(std::move(articSource.m_code));
 }
 
-void ArticTranspiler::dispatch_node(ASTNode::ref n)
+void
+ArticTranspiler::dispatch_node(ASTNode::ref n)
 {
     auto node = n.get();
     switch (node->nodetype()) {
-    case ASTNode::unknown_node:
-        NOT_IMPLEMENTED;
-        break;
+    case ASTNode::unknown_node: NOT_IMPLEMENTED; break;
     case ASTNode::shader_declaration_node:
-        transpile_shader_declaration((ASTshader_declaration*) node);
+        transpile_shader_declaration((ASTshader_declaration*)node);
         break;
     case ASTNode::function_declaration_node:
-        transpile_function_declaration((ASTfunction_declaration*) node);
+        transpile_function_declaration((ASTfunction_declaration*)node);
         break;
     case ASTNode::variable_declaration_node:
-        transpile_variable_declaration((ASTvariable_declaration*) node);
+        transpile_variable_declaration((ASTvariable_declaration*)node);
         break;
     case ASTNode::compound_initializer_node:
-        transpile_compound_initializer((ASTcompound_initializer*) node);
+        transpile_compound_initializer((ASTcompound_initializer*)node);
         break;
     case ASTNode::variable_ref_node:
-        transpile_variable_ref((ASTvariable_ref*) node);
+        transpile_variable_ref((ASTvariable_ref*)node);
         break;
     case ASTNode::preincdec_node:
-        transpile_preincdec((ASTpreincdec*) node);
+        transpile_preincdec((ASTpreincdec*)node);
         break;
     case ASTNode::postincdec_node:
         transpile_postincdec((ASTpostincdec*)node);
         break;
-    case ASTNode::index_node:
-        transpile_index((ASTindex*) node);
-        break;
+    case ASTNode::index_node: transpile_index((ASTindex*)node); break;
     case ASTNode::structselect_node:
-        transpile_structureselection((ASTstructselect*) node);
+        transpile_structureselection((ASTstructselect*)node);
         break;
     case ASTNode::conditional_statement_node:
-        transpile_conditional_statement((ASTconditional_statement*) node);
+        transpile_conditional_statement((ASTconditional_statement*)node);
         break;
     case ASTNode::loop_statement_node:
-        transpile_loop_statement((ASTloop_statement*) node);
+        transpile_loop_statement((ASTloop_statement*)node);
         break;
     case ASTNode::loopmod_statement_node:
-        transpile_loopmod_statement((ASTloopmod_statement*) node);
+        transpile_loopmod_statement((ASTloopmod_statement*)node);
         break;
     case ASTNode::return_statement_node:
-        transpile_return_statement((ASTreturn_statement*) node);
+        transpile_return_statement((ASTreturn_statement*)node);
         break;
     case ASTNode::binary_expression_node:
-        transpile_binary_expression((ASTbinary_expression*) node);
+        transpile_binary_expression((ASTbinary_expression*)node);
         break;
     case ASTNode::unary_expression_node:
-        transpile_unary_expression((ASTunary_expression*) node);
+        transpile_unary_expression((ASTunary_expression*)node);
         break;
     case ASTNode::assign_expression_node:
-        transpile_assign_expression((ASTassign_expression*) node);
+        transpile_assign_expression((ASTassign_expression*)node);
         break;
     case ASTNode::ternary_expression_node:
-        transpile_ternary_expression((ASTternary_expression *) node);
+        transpile_ternary_expression((ASTternary_expression*)node);
         break;
     case ASTNode::comma_operator_node:
-        transpile_comma_operator((ASTcomma_operator*) node);
+        transpile_comma_operator((ASTcomma_operator*)node);
         break;
     case ASTNode::typecast_expression_node:
-        transpile_typecast_expression((ASTtypecast_expression*) node);
+        transpile_typecast_expression((ASTtypecast_expression*)node);
         break;
     case ASTNode::type_constructor_node:
-        transpile_type_constructor((ASTtype_constructor*) node);
+        transpile_type_constructor((ASTtype_constructor*)node);
         break;
     case ASTNode::function_call_node:
-        transpile_function_call((ASTfunction_call*) node);
+        transpile_function_call((ASTfunction_call*)node);
         break;
     case ASTNode::literal_node:
-        transpile_literal_node((ASTliteral*) node);
+        transpile_literal_node((ASTliteral*)node);
         break;
-    case ASTNode::_last_node:
-        NOT_IMPLEMENTED;
-        break;
+    case ASTNode::_last_node: NOT_IMPLEMENTED; break;
     }
 }
 void
@@ -373,11 +370,12 @@ ArticTranspiler::transpile_shader_declaration(ASTshader_declaration* node)
     source.add_source_with_indent("}\n\n");
 }
 
-void ArticTranspiler::transpile_statement_list(ASTNode::ref node)
+void
+ArticTranspiler::transpile_statement_list(ASTNode::ref node)
 {
     while (node) {
         dispatch_node(node);
-        node      = node->next();
+        node = node->next();
     }
 }
 void
@@ -399,7 +397,7 @@ ArticTranspiler::transpile_compound_initializer(ASTcompound_initializer* node)
 void
 ArticTranspiler::transpile_variable_ref(ASTvariable_ref* node)
 {
-    NOT_IMPLEMENTED;
+    source.add_source(node->name().string());
 }
 void
 ArticTranspiler::transpile_preincdec(ASTpreincdec* node)
@@ -474,17 +472,94 @@ ArticTranspiler::transpile_typecast_expression(ASTtypecast_expression* node)
 void
 ArticTranspiler::transpile_type_constructor(ASTtype_constructor* node)
 {
-    NOT_IMPLEMENTED;
+    std::vector<ASTNode::ref> args = {};
+    ASTNode::ref arg_node          = node->args();
+    while (arg_node) {
+        args.push_back(arg_node);
+        arg_node = arg_node->next();
+    }
+    source.add_source(artic_string(node->typespec()), "{");
+    if (node->typespec().is_triple() && args.size() == 1) {
+        args.push_back(args[0]);
+        args.push_back(args[0]);
+    }
+
+    for (size_t i = 0; i < args.size(); ++i) {
+        source.add_source(get_arg_name(node->typespec(), static_cast<int>(i)), " = ");
+        dispatch_node(args[i]);
+        source.add_source(", ");
+
+    }
+    source.add_source("}");
 }
+
+
 void
 ArticTranspiler::transpile_function_call(ASTfunction_call* node)
 {
-    NOT_IMPLEMENTED;
+    if(node->is_struct_ctr()){
+        auto constructor = ASTtype_constructor(nullptr, node->typespec(), node->args().get());
+        transpile_type_constructor(&constructor);
+    } else {
+        std::vector<ASTNode::ref> args = {};
+        auto arg_node = node->args();
+        while(arg_node){
+            args.push_back(arg_node);
+            arg_node = arg_node->next();
+        }
+        source.add_source(node->opname(), "(");
+        for(auto arg : args){
+            dispatch_node(arg);
+            source.add_source(", ");
+        }
+        source.add_source(")");
+
+
+    }
+
 }
 void
 ArticTranspiler::transpile_literal_node(ASTliteral* node)
 {
-    NOT_IMPLEMENTED;
+    if(node->typespec().is_int()){
+        source.add_source(std::to_string(node->intval()));
+    } else if(node->typespec().is_float()){
+        source.add_source(std::to_string(node->floatval()));
+    } else if(node->typespec().is_string()){
+        add_string_constant(node->strval());
+        source.add_source("Strings::", node->strval());
+    } else {
+        NOT_IMPLEMENTED;
+    }
+}
+
+
+std::string
+ArticTranspiler::get_arg_name(TypeSpec typeSpec, int argnum)
+{
+    if (typeSpec.is_triple() && !typeSpec.is_color()) {
+        switch (argnum) {
+        case 0: return "x";
+        case 1: return "y";
+        default: return "z";
+        }
+    } else if(typeSpec.is_color()) {
+        switch (argnum) {
+        case 0: return "r";
+        case 1: return "g";
+        default: return "b";
+        }
+    } else if(typeSpec.is_structure()) {
+        auto structSpec = typeSpec.structspec();
+        OSL_ASSERT(argnum < structSpec->numfields());
+        auto fieldSpec = structSpec->field(static_cast<int>(argnum));
+        return fieldSpec.name.string();
+    } else {
+        NOT_IMPLEMENTED;
+    }
+}
+void ArticTranspiler::add_string_constant(const std::string& s) {
+    const_strings.insert(s);
 }
 
 OSL_NAMESPACE_EXIT
