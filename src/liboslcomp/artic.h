@@ -72,14 +72,15 @@ private:
 
 
 class ArticTranspiler {
-    ArticTranspiler(ArticSource source) : source(source) {}
+
 
 public:
 
-
+    ArticTranspiler(ArticSource& source) : source(source) {}
+    void dispatch_node(ASTNode::ref);
 
 private:
-    void dispatch_node(ASTNode::ref);
+
 
     void transpile_shader_declaration(ASTshader_declaration* node);
 

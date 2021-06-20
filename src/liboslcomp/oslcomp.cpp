@@ -9,7 +9,7 @@
 #include <streambuf>
 #include <string>
 #include <vector>
-
+#include "artic.h"
 #include "oslcomp_pvt.h"
 
 #include <OpenImageIO/filesystem.h>
@@ -30,6 +30,7 @@
 #include <llvm/Support/MemoryBuffer.h>
 #include <llvm/Support/ToolOutputFile.h>
 #include <llvm/Support/raw_ostream.h>
+
 
 
 OSL_NAMESPACE_ENTER
@@ -466,9 +467,12 @@ OSLCompilerImpl::compile(string_view filename,
             write_dependency_file(filename);
 
         if (!error_encountered()) {
-            //ArticSource artic_source("  ");
-            //shader()->codegen_artic(artic_source);
-            //artic_source.print();
+
+            ArticSource artic_source("  ");
+            ArticTranspiler artic_transpiler(artic_source);
+            artic_transpiler.dispatch_node(shader());
+            artic_source.print();
+
             shader()->codegen();
             track_variable_dependencies();
             track_variable_lifetimes();
