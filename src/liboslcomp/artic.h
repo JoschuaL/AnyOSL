@@ -25,10 +25,16 @@ OSL_NAMESPACE_ENTER
 using namespace pvt;
 
 std::string
-artic_type_string_to_string(TypeSpec typeSpec);
+artic_type_string_to_string(std::string in);
 
 const std::string
-artic_string(TypeSpec typeSpec);
+artic_string(TypeSpec typeSpec, int array_size);
+
+int
+get_array_size(ASTNode* init);
+
+const std::string
+get_artic_type_string(ASTNode::ref node);
 
 const std::string
 artic_simpletype(TypeDesc typedesc);
