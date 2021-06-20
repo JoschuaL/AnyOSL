@@ -10,38 +10,7 @@ OSL_NAMESPACE_ENTER
 using pvt::ASTNode;
 using pvt::TypeSpec;
 
-std::string
-op_to_string(int op_int)
-{
-    ASTNode::Operator op = static_cast<ASTNode::Operator>(op_int);
-    switch (op) {
-    case ASTNode::Nothing: NOT_IMPLEMENTED; break;
-    case ASTNode::Decr: return "dec"; break;
-    case ASTNode::Incr: return "inc"; break;
-    case ASTNode::Assign: return "="; break;
-    case ASTNode::Mul: return "mul"; break;
-    case ASTNode::Div: return "div"; break;
-    case ASTNode::Add: return "add"; break;
-    case ASTNode::Sub: return "sub"; break;
-    case ASTNode::Mod: return "mod"; break;
-    case ASTNode::Equal: return "eq"; break;
-    case ASTNode::NotEqual: return "neq"; break;
-    case ASTNode::Greater: return "ge"; break;
-    case ASTNode::Less: return "le"; break;
-    case ASTNode::GreaterEqual: return "geq"; break;
-    case ASTNode::LessEqual: return "leq"; break;
-    case ASTNode::BitAnd: return "band"; break;
-    case ASTNode::BitOr: return "bor"; break;
-    case ASTNode::Xor: return "bxor"; break;
-    case ASTNode::Compl: return "bcomp"; break;
-    case ASTNode::And: return "land"; break;
-    case ASTNode::Or: return "lor"; break;
-    case ASTNode::Not: return "lnot"; break;
-    case ASTNode::ShiftLeft: return "shiftl"; break;
-    case ASTNode::ShiftRight: return "shiftr"; break;
-    default: NOT_IMPLEMENTED; break;
-    }
-}
+
 
 std::string
 artic_type_string_to_string(TypeSpec typeSpec)
@@ -186,50 +155,8 @@ ArticSource::newline()
 {
     m_code += "\n";
 }
-std::string
-ArticSource::pop_temp_characters(int num_chars)
-{
-    auto poped = "";
-    for (int i = 0; i < num_chars; ++i) {
-        poped += m_buffer[m_code.length() - 1];
-        m_buffer.pop_back();
-    }
-    return poped;
-}
 
-void
-ArticSource::save_temp_with_indent(std::string&& in)
-{
-    for (int i = 0; i < m_indent; i++) {
-        m_buffer += m_indent_string;
-    }
-    m_buffer += in;
-}
 
-void
-ArticSource::save_temp(std::string in)
-{
-    m_buffer += in;
-}
-
-std::string&&
-ArticSource::pop_temp()
-{
-    return std::move(m_buffer);
-}
-ArticSource
-ArticSource::make_temp_source()
-{
-    auto is    = this->m_indent_string;
-    auto a     = ArticSource(is);
-    a.m_indent = this->m_indent;
-    return a;
-}
-void
-ArticSource::integrate_temp_source(ArticSource&& articSource)
-{
-    this->save_temp(std::move(articSource.m_code));
-}
 
 void
 ArticTranspiler::dispatch_node(ASTNode::ref n)
@@ -308,8 +235,8 @@ void
 ArticTranspiler::transpile_shader_declaration(ASTshader_declaration* node)
 {
     auto shadername = node->shadername().string();
-    source.add_source_with_indent("struct ", shadername, "_in {\n");
-    source.push_indent();
+    source->add_source_with_indent("struct ", shadername, "_in {\n");
+    source->push_indent();
     std::vector<ASTvariable_declaration*> inputs  = {};
     std::vector<ASTvariable_declaration*> outputs = {};
     for (ASTNode::ref f = node->formals(); f; f = f->next()) {
@@ -318,56 +245,56 @@ ArticTranspiler::transpile_shader_declaration(ASTshader_declaration* node)
             outputs.push_back(v);
         }
         inputs.push_back(v);
-        source.add_source_with_indent(v->name().string(), ": ",
+        source->add_source_with_indent(v->name().string(), ": ",
                                       artic_string(v->typespec()), ",\n");
     }
-    source.pop_indent();
-    source.add_source_with_indent("}\n\n");
+    source->pop_indent();
+    source->add_source_with_indent("}\n\n");
 
-    source.add_source_with_indent("fn make_", shadername, "_in -> ", shadername,
+    source->add_source_with_indent("fn make_", shadername, "_in -> ", shadername,
                                   "_in {\n");
-    source.push_indent();
-    source.add_source_with_indent(shadername, "_in{\n");
-    source.push_indent();
+    source->push_indent();
+    source->add_source_with_indent(shadername, "_in{\n");
+    source->push_indent();
     for (auto v : inputs) {
-        source.add_source_with_indent(v->name().string(), " = ");
+        source->add_source_with_indent(v->name().string(), " = ");
         dispatch_node(v->init());
-        source.add_source(",\n");
+        source->add_source(",\n");
     }
-    source.pop_indent();
-    source.add_source_with_indent("}\n");
-    source.pop_indent();
-    source.add_source_with_indent("}\n\n");
+    source->pop_indent();
+    source->add_source_with_indent("}\n");
+    source->pop_indent();
+    source->add_source_with_indent("}\n\n");
 
-    source.add_source_with_indent("struct ", shadername, "_out {\n");
-    source.push_indent();
+    source->add_source_with_indent("struct ", shadername, "_out {\n");
+    source->push_indent();
     for (auto v : outputs) {
-        source.add_source_with_indent(v->name().string(), ": ",
+        source->add_source_with_indent(v->name().string(), ": ",
                                       artic_string(v->typespec()), ",\n");
     }
-    source.pop_indent();
-    source.add_source_with_indent("}\n\n");
+    source->pop_indent();
+    source->add_source_with_indent("}\n\n");
 
-    source.add_source_with_indent("fn ", shadername, "_impl(in: ", shadername,
+    source->add_source_with_indent("fn ", shadername, "_impl(in: ", shadername,
                                   "_in) -> ", shadername, "_out {\n");
-    source.push_indent();
+    source->push_indent();
     for (auto v : inputs) {
-        source.add_source_with_indent("let ", v->name().string(), " = in.",
-                                      v->name().string(), ",\n");
+        source->add_source_with_indent("let ", v->is_output() ? "mut " : "", v->name().string(), " = in.",
+                                      v->name().string(), ";\n");
     }
 
     transpile_statement_list(node->statements());
 
-    source.add_source_with_indent(node->shadername().string(), "_out {\n");
-    source.push_indent();
+    source->add_source_with_indent(node->shadername().string(), "_out {\n");
+    source->push_indent();
     for (auto v : outputs) {
-        source.add_source_with_indent(v->name().string(), " = ",
+        source->add_source_with_indent(v->name().string(), " = ",
                                       v->name().string(), ",\n");
     }
-    source.pop_indent();
-    source.add_source_with_indent("}\n");
-    source.pop_indent();
-    source.add_source_with_indent("}\n\n");
+    source->pop_indent();
+    source->add_source_with_indent("}\n");
+    source->pop_indent();
+    source->add_source_with_indent("}\n\n");
 }
 
 void
@@ -375,6 +302,7 @@ ArticTranspiler::transpile_statement_list(ASTNode::ref node)
 {
     while (node) {
         dispatch_node(node);
+        source->add_source(";\n");
         node = node->next();
     }
 }
@@ -387,7 +315,11 @@ ArticTranspiler::transpile_function_declaration(ASTfunction_declaration* node)
 void
 ArticTranspiler::transpile_variable_declaration(ASTvariable_declaration* node)
 {
-    NOT_IMPLEMENTED;
+    source->add_source_with_indent("let mut ", node->name().string(), ": ", artic_string(node->typespec()));
+    if(node->init()){
+        source->add_source(" = ");
+        dispatch_node(node->init());
+    }
 }
 void
 ArticTranspiler::transpile_compound_initializer(ASTcompound_initializer* node)
@@ -397,7 +329,7 @@ ArticTranspiler::transpile_compound_initializer(ASTcompound_initializer* node)
 void
 ArticTranspiler::transpile_variable_ref(ASTvariable_ref* node)
 {
-    source.add_source(node->name().string());
+    source->add_source(node->name().string());
 }
 void
 ArticTranspiler::transpile_preincdec(ASTpreincdec* node)
@@ -442,7 +374,12 @@ ArticTranspiler::transpile_return_statement(ASTreturn_statement* node)
 void
 ArticTranspiler::transpile_binary_expression(ASTbinary_expression* node)
 {
-    NOT_IMPLEMENTED;
+    auto left = node->left();
+    auto right = node->right();
+    source->add_source("ops_", artic_type_string_to_string(node->typespec()), ".", node->opword(), "(");
+    dispatch_node(left);
+    source->add_source(", ");
+    dispatch_node(right);
 }
 void
 ArticTranspiler::transpile_unary_expression(ASTunary_expression* node)
@@ -452,7 +389,10 @@ ArticTranspiler::transpile_unary_expression(ASTunary_expression* node)
 void
 ArticTranspiler::transpile_assign_expression(ASTassign_expression* node)
 {
-    NOT_IMPLEMENTED;
+    source->add_source_with_indent("");
+    dispatch_node(node->var());
+    source->add_source(" = ");
+    dispatch_node(node->expr());
 }
 void
 ArticTranspiler::transpile_ternary_expression(ASTternary_expression* node)
@@ -478,19 +418,19 @@ ArticTranspiler::transpile_type_constructor(ASTtype_constructor* node)
         args.push_back(arg_node);
         arg_node = arg_node->next();
     }
-    source.add_source(artic_string(node->typespec()), "{");
+    source->add_source(artic_string(node->typespec()), "{");
     if (node->typespec().is_triple() && args.size() == 1) {
         args.push_back(args[0]);
         args.push_back(args[0]);
     }
 
     for (size_t i = 0; i < args.size(); ++i) {
-        source.add_source(get_arg_name(node->typespec(), static_cast<int>(i)), " = ");
+        source->add_source(get_arg_name(node->typespec(), static_cast<int>(i)), " = ");
         dispatch_node(args[i]);
-        source.add_source(", ");
+        source->add_source(", ");
 
     }
-    source.add_source("}");
+    source->add_source("}");
 }
 
 
@@ -507,12 +447,12 @@ ArticTranspiler::transpile_function_call(ASTfunction_call* node)
             args.push_back(arg_node);
             arg_node = arg_node->next();
         }
-        source.add_source(node->opname(), "(");
+        source->add_source(node->opname(), "(");
         for(auto arg : args){
             dispatch_node(arg);
-            source.add_source(", ");
+            source->add_source(", ");
         }
-        source.add_source(")");
+        source->add_source(")");
 
 
     }
@@ -522,12 +462,12 @@ void
 ArticTranspiler::transpile_literal_node(ASTliteral* node)
 {
     if(node->typespec().is_int()){
-        source.add_source(std::to_string(node->intval()));
+        source->add_source(std::to_string(node->intval()));
     } else if(node->typespec().is_float()){
-        source.add_source(std::to_string(node->floatval()));
+        source->add_source(std::to_string(node->floatval()));
     } else if(node->typespec().is_string()){
         add_string_constant(node->strval());
-        source.add_source("Strings::", node->strval());
+        source->add_source("Strings::", node->strval());
     } else {
         NOT_IMPLEMENTED;
     }

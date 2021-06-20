@@ -469,7 +469,7 @@ OSLCompilerImpl::compile(string_view filename,
         if (!error_encountered()) {
 
             ArticSource artic_source("  ");
-            ArticTranspiler artic_transpiler(artic_source);
+            ArticTranspiler artic_transpiler(&artic_source);
             artic_transpiler.dispatch_node(shader());
             artic_source.print();
 

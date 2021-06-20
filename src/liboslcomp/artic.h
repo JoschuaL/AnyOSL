@@ -57,18 +57,12 @@ public:
     int pop_indent();
     std::string get_code();
     void print();
-    std::string pop_temp_characters(int num_chars = 1);
-    void save_temp(std::string in);
-    void save_temp_with_indent(std::string&& in);
-    std::string&& pop_temp();
-    ArticSource make_temp_source();
-    void integrate_temp_source(ArticSource&& articSource);
+
 
 private:
     int m_indent;
     std::string m_indent_string;
     std::string m_code;
-    std::string m_buffer;
 };
 
 
@@ -77,7 +71,7 @@ class ArticTranspiler {
 
 public:
 
-    ArticTranspiler(ArticSource& source) : source(source) {}
+    ArticTranspiler(ArticSource* source) : source(source) {}
     void dispatch_node(ASTNode::ref);
 
 private:
@@ -135,7 +129,7 @@ private:
 
 
 
-    ArticSource source;
+    ArticSource* source;
 
     std::unordered_set<std::string> const_strings = {};
 };
