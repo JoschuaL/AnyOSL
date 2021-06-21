@@ -683,6 +683,10 @@ ASTpreincdec::childname(size_t i) const
     return name[i];
 }
 
+bool ASTpreincdec::is_increment(){
+    return m_op == Incr;
+}
+
 
 
 ASTpostincdec::ASTpostincdec(OSLCompilerImpl* comp, int op, ASTNode* expr)
@@ -945,6 +949,12 @@ ASTloop_statement::childname(size_t i) const
     static const char* name[] = { "initializer", "condition", "iteration",
                                   "bodystatement" };
     return name[i];
+}
+
+ASTloop_statement::LoopType
+ASTloop_statement::get_looptype()
+{
+    return static_cast<LoopType>(m_op);
 }
 
 

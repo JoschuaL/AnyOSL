@@ -346,8 +346,14 @@ void
 ArticTranspiler::transpile_statement_list(ASTNode::ref node)
 {
     while (node) {
-        dispatch_node(node);
-        source->add_source(";\n");
+        if(node->nodetype() != ASTNode::NodeType::loop_statement_node
+            && node->nodetype() != ASTNode::NodeType::conditional_statement_node){
+            source->add_source_with_indent("");
+            dispatch_node(node);
+            source->add_source(";\n");
+        } else {
+            dispatch_node(node);
+        }
         node = node->next();
     }
 }
@@ -360,7 +366,7 @@ ArticTranspiler::transpile_function_declaration(ASTfunction_declaration* node)
 void
 ArticTranspiler::transpile_variable_declaration(ASTvariable_declaration* node)
 {
-    source->add_source_with_indent("let mut ", node->name().string(), ": ",
+    source->add_source("let mut ", node->name().string(), ": ",
                                    get_artic_type_string(node));
     if (node->init()) {
         source->add_source(" = ");
@@ -387,7 +393,11 @@ ArticTranspiler::transpile_variable_ref(ASTvariable_ref* node)
 void
 ArticTranspiler::transpile_preincdec(ASTpreincdec* node)
 {
-    NOT_IMPLEMENTED;
+    source->add_source("{");
+    dispatch_node(node->var());
+    source->add_source(" ", node->is_increment() ? "+" : "-", "= 1;");
+    dispatch_node(node->var());
+    source->add_source("}");
 }
 void
 ArticTranspiler::transpile_postincdec(ASTpostincdec* node)
@@ -397,23 +407,82 @@ ArticTranspiler::transpile_postincdec(ASTpostincdec* node)
 void
 ArticTranspiler::transpile_index(ASTindex* node)
 {
-    NOT_IMPLEMENTED;
+    auto lval = node->lvalue();
+    dispatch_node(lval);
+    source->add_source("[");
+    dispatch_node(node->index());
+    source->add_source("]");
 }
 void
 ArticTranspiler::transpile_structureselection(ASTstructselect* node)
 {
     NOT_IMPLEMENTED;
 }
+
 void
 ArticTranspiler::transpile_conditional_statement(ASTconditional_statement* node)
 {
-    NOT_IMPLEMENTED;
+    auto true_node = node->truestmt();
+    auto false_node = node->falsestmt();
+    source->add_source_with_indent("if(");
+    dispatch_node(node->cond());
+    source->add_source(") {\n");
+    source->push_indent();
+    transpile_statement_list(true_node);
+    source->pop_indent();
+    source->add_source_with_indent("}");
+    if(false_node){
+        source->add_source(" else {\n");
+        source->push_indent();
+        transpile_statement_list(false_node);
+        source->pop_indent();
+        source->add_source_with_indent("}");
+    }
+    source->add_source("\n");
 }
 void
 ArticTranspiler::transpile_loop_statement(ASTloop_statement* node)
 {
-    source->print();
-    NOT_IMPLEMENTED;
+    switch(node->get_looptype()){
+    case ASTloop_statement::LoopFor:
+        source->add_source_with_indent("{\n");
+        source->push_indent();
+        source->add_source_with_indent("let mut ");
+        dispatch_node(node->init());
+        source->add_source(";\n");
+    case ASTloop_statement::LoopWhile:
+        source->add_source_with_indent("while(");
+        dispatch_node(node->cond());
+        source->add_source(") {\n");
+        break;
+    case ASTloop_statement::LoopDo:
+        source->add_source_with_indent("while({");
+        break;
+    }
+    source->push_indent();
+    transpile_statement_list(node->stmt());
+
+
+    switch(node->get_looptype()){
+    case ASTloop_statement::LoopFor:
+        source->add_source_with_indent("");
+        dispatch_node(node->iter());
+        source->pop_indent();
+        source->add_source("\n");
+        source->add_source_with_indent("}\n");
+        source->pop_indent();
+        source->add_source_with_indent("}\n");
+        break;
+    case ASTloop_statement::LoopWhile:
+        source->pop_indent();
+        source->add_source_with_indent("}\n");
+        break;
+    case ASTloop_statement::LoopDo:
+        dispatch_node(node->cond());
+        source->pop_indent();
+        source->add_source_with_indent("}\n");
+        break;
+    }
 }
 void
 ArticTranspiler::transpile_loopmod_statement(ASTloopmod_statement* node)
@@ -437,6 +506,7 @@ ArticTranspiler::transpile_binary_expression(ASTbinary_expression* node)
     dispatch_node(left);
     source->add_source(", ");
     dispatch_node(right);
+    source->add_source(")");
 }
 void
 ArticTranspiler::transpile_unary_expression(ASTunary_expression* node)
@@ -446,7 +516,7 @@ ArticTranspiler::transpile_unary_expression(ASTunary_expression* node)
 void
 ArticTranspiler::transpile_assign_expression(ASTassign_expression* node)
 {
-    source->add_source_with_indent("");
+    source->add_source("");
     dispatch_node(node->var());
     source->add_source(" = ");
     dispatch_node(node->expr());
@@ -464,30 +534,37 @@ ArticTranspiler::transpile_comma_operator(ASTcomma_operator* node)
 void
 ArticTranspiler::transpile_typecast_expression(ASTtypecast_expression* node)
 {
-    NOT_IMPLEMENTED;
+    source->add_source("ops_", get_artic_type_string(node->expr()), ".as_", get_artic_type_string(node), "(");
+    dispatch_node(node->expr());
+    source->add_source(")");
 }
 void
 ArticTranspiler::transpile_type_constructor(ASTtype_constructor* node)
 {
-    std::vector<ASTNode::ref> args = {};
-    ASTNode::ref arg_node          = node->args();
-    while (arg_node) {
-        args.push_back(arg_node);
-        arg_node = arg_node->next();
-    }
-    source->add_source(artic_string(node->typespec(), 0), "{");
-    if (node->typespec().is_triple() && args.size() == 1) {
-        args.push_back(args[0]);
-        args.push_back(args[0]);
+    if(node->typespec().is_float() || node->typespec().is_int()){
+        dispatch_node(node->args());
+    } else {
+        std::vector<ASTNode::ref> args = {};
+        ASTNode::ref arg_node          = node->args();
+        while (arg_node) {
+            args.push_back(arg_node);
+            arg_node = arg_node->next();
+        }
+        source->add_source(artic_string(node->typespec(), 0), "{");
+        if (node->typespec().is_triple() && args.size() == 1) {
+            args.push_back(args[0]);
+            args.push_back(args[0]);
+        }
+
+        for (size_t i = 0; i < args.size(); ++i) {
+            source->add_source(get_arg_name(node->typespec(), static_cast<int>(i)),
+                               " = ");
+            dispatch_node(args[i]);
+            source->add_source(", ");
+        }
+        source->add_source("}");
     }
 
-    for (size_t i = 0; i < args.size(); ++i) {
-        source->add_source(get_arg_name(node->typespec(), static_cast<int>(i)),
-                           " = ");
-        dispatch_node(args[i]);
-        source->add_source(", ");
-    }
-    source->add_source("}");
 }
 
 
@@ -549,6 +626,8 @@ ArticTranspiler::get_arg_name(TypeSpec typeSpec, int argnum)
         OSL_ASSERT(argnum < structSpec->numfields());
         auto fieldSpec = structSpec->field(static_cast<int>(argnum));
         return fieldSpec.name.string();
+    } else if(typeSpec.is_float() || typeSpec.is_int()) {
+        NOT_IMPLEMENTED;
     } else {
         NOT_IMPLEMENTED;
     }

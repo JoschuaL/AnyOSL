@@ -6,6 +6,8 @@
 #include <vector>
 
 #include "oslcomp_pvt.h"
+#include "ast.h"
+
 
 #include <OpenImageIO/strutil.h>
 namespace Strutil = OIIO::Strutil;
@@ -133,6 +135,7 @@ TypeSpec ASTpreincdec::typecheck(TypeSpec /*expected*/)
     m_typespec  = var()->typespec();
     return m_typespec;
 }
+
 
 
 
@@ -266,6 +269,7 @@ TypeSpec ASTloop_statement::typecheck(TypeSpec /*expected*/)
         errorf("Cannot use an array as an '%s' condition", opname());
     return m_typespec = TypeDesc(TypeDesc::NONE);
 }
+
 
 
 

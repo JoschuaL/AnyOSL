@@ -54,7 +54,7 @@ surface mandelbrot (
     if (i < iters) {
         fout = i;
         float f = pow(float(i)/iters, 1/log10(float(iters)));
-        Cout = (color)spline ("linear", f, colormap);
+        Cout = spline ("linear", f, colormap);
     } else {
         Cout = 0;
     }

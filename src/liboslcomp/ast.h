@@ -576,7 +576,7 @@ public:
     const char* childname(size_t i) const;
     TypeSpec typecheck(TypeSpec expected);
     Symbol* codegen(Symbol* dest = NULL);
-
+    bool is_increment();
     ref var() const { return child(0); }
 };
 
@@ -704,6 +704,7 @@ public:
     const char* opname() const;
     TypeSpec typecheck(TypeSpec expected);
     Symbol* codegen(Symbol* dest = NULL);
+    LoopType get_looptype();
 
     ref init() const { return child(0); }
     ref cond() const { return child(1); }
