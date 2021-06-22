@@ -196,6 +196,10 @@ public:
     /// Reverse the order of the list.
     friend ASTNode::ref reverse(ASTNode::ref list);
 
+    friend class ASTtype_constructor;
+
+
+
     /// What source file was this parse node created from?
     ///
     ustring sourcefile() const { return m_sourcefile; }
@@ -748,6 +752,164 @@ public:
 };
 
 
+class ASTfunction_call final : public ASTNode {
+public:
+    ASTfunction_call(OSLCompilerImpl* comp, ustring name, ASTNode* args,
+                     FunctionSymbol* funcsym = nullptr);
+    const char* nodetypename() const { return "function_call"; }
+    const char* childname(size_t i) const;
+    const char* opname() const;
+    void print(std::ostream& out, int indentlevel = 0) const;
+    TypeSpec typecheck(TypeSpec expected);
+    Symbol* codegen(Symbol* dest = NULL);
+
+    FunctionSymbol* func() const { return (FunctionSymbol*)m_sym; }
+    ref args() const { return child(0); }
+
+    /// Is it a struct constructor?
+    bool is_struct_ctr() const { return m_sym && m_sym->is_structure(); }
+
+    /// Is it a user-defined function (as opposed to an OSL built-in)?
+    ///
+    bool is_user_function() const
+    {
+        return !is_struct_ctr() && user_function()
+               && !user_function()->is_builtin();
+    }
+
+    /// Pointer to the ASTfunction_declaration node that defines the user
+    /// function, or NULL if it's not a user-defined function.
+    ASTfunction_declaration* user_function() const
+    {
+        return func() ? (ASTfunction_declaration*)func()->node() : nullptr;
+    }
+
+private:
+    /// Handle all the special cases for built-ins.  This includes
+    /// irregular patterns of which args are read vs written, special
+    /// checks for printf- and texture-like, etc.
+    void typecheck_builtin_specialcase();
+
+    /// Make sure the printf-like format string matches the list of
+    /// arguments pointed to by arg.  If ok, return true, otherwise
+    /// return false and call an appropriate error().
+    bool typecheck_printf_args(const char* format, ASTNode* arg);
+
+    /// Handle "funcion calls" that are really struct ctrs.
+    TypeSpec typecheck_struct_constructor();
+
+    /// Is the argument number 'arg' read by the op?
+    ///
+    bool argread(int arg) const;
+    /// Is the argument number 'arg' written by the op?
+    ///
+    bool argwrite(int arg) const;
+    /// Declare that argument number 'arg' is read by this op.
+    ///
+    void argread(int arg, bool val)
+    {
+        if (arg < 32) {
+            if (val)
+                m_argread |= (1 << arg);
+            else
+                m_argread &= ~(1 << arg);
+        }
+    }
+    /// Declare that argument number 'arg' is written by this op.
+    ///
+    void argwrite(int arg, bool val)
+    {
+        if (arg < 32) {
+            if (val)
+                m_argwrite |= (1 << arg);
+            else
+                m_argwrite &= ~(1 << arg);
+        }
+    }
+    /// Declare that argument number 'arg' is only written (not read!) by
+    /// this op.
+    void argwriteonly(int arg)
+    {
+        argread(arg, false);
+        argwrite(arg, true);
+    }
+    /// Declare optional arguments as outputs (write only) by this op.
+    ///
+    void mark_optional_output(int firstopt, const char** tags);
+    /// Declare that argument number 'arg' takes derivatives.
+    ///
+    void argtakesderivs(int arg, bool val)
+    {
+        if (arg < 32) {
+            if (val)
+                m_argtakesderivs |= (1 << arg);
+            else
+                m_argtakesderivs &= ~(1 << arg);
+        }
+    }
+
+    void codegen_arg(SymbolPtrVec& argdest, SymbolPtrVec& index,
+                     SymbolPtrVec& index1, SymbolPtrVec& index2, int argnum,
+                     ASTNode* arg, ASTNode* form, const TypeSpec& formaltype,
+                     bool writearg, bool& indexed_output_params);
+
+
+    /// Call compiler->struct_field_pair for each field in the struct.
+    ///
+    void struct_pair_all_fields(StructSpec* structspec, ustring formal,
+                                ustring actual, Symbol* arrayindex = NULL);
+
+    ustring m_name;                 ///< Name of the function being called
+    Symbol* m_sym;                  ///< Symbol of the function
+    FunctionSymbol* m_poly;         ///< The specific polymorphic variant
+    unsigned int m_argread;         ///< Bit field - which args are read
+    unsigned int m_argwrite;        ///< Bit field - which args are written
+    unsigned int m_argtakesderivs;  ///< Bit field - which args take derivs
+};
+
+
+class ASTliteral final : public ASTNode {
+public:
+    ASTliteral(OSLCompilerImpl* comp, int i)
+        : ASTNode(literal_node, comp), m_i(i)
+    {
+        m_typespec = TypeDesc::TypeInt;
+    }
+
+    ASTliteral(OSLCompilerImpl* comp, float f)
+        : ASTNode(literal_node, comp), m_f(f)
+    {
+        m_typespec = TypeDesc::TypeFloat;
+    }
+
+    ASTliteral(OSLCompilerImpl* comp, ustring s)
+        : ASTNode(literal_node, comp), m_s(s)
+    {
+        m_typespec = TypeDesc::TypeString;
+    }
+
+    const char* nodetypename() const { return "literal"; }
+    const char* childname(size_t i) const;
+    void print(std::ostream& out, int indentlevel) const;
+    TypeSpec typecheck(TypeSpec /*expected*/) { return m_typespec; }
+    Symbol* codegen(Symbol* dest = NULL);
+
+    const char* strval() const { return m_s.c_str(); }
+    int intval() const { return m_i; }
+    float floatval() const { return m_typespec.is_int() ? (float)m_i : m_f; }
+    ustring ustrval() const { return m_s; }
+
+    void negate()
+    {
+        m_i = -m_i;
+        m_f = -m_f;
+    }
+
+private:
+    ustring m_s;
+    int m_i;
+    float m_f;
+};
 
 class ASTtype_constructor : public ASTNode {
 protected:
@@ -762,6 +924,9 @@ public:
         : ASTtype_constructor(type_constructor_node, comp, typespec, args)
     {
     }
+
+    ASTtype_constructor(ASTfunction_call* fc): ASTtype_constructor(fc->m_compiler, fc->m_typespec, fc->args().get()){}
+    ASTtype_constructor(ASTliteral* lit): ASTtype_constructor(lit->m_compiler, lit->m_typespec, lit){}
 
     const char* nodetypename() const { return "type_constructor"; }
     const char* childname(size_t i) const;
@@ -923,165 +1088,9 @@ public:
 
 
 
-class ASTfunction_call final : public ASTNode {
-public:
-    ASTfunction_call(OSLCompilerImpl* comp, ustring name, ASTNode* args,
-                     FunctionSymbol* funcsym = nullptr);
-    const char* nodetypename() const { return "function_call"; }
-    const char* childname(size_t i) const;
-    const char* opname() const;
-    void print(std::ostream& out, int indentlevel = 0) const;
-    TypeSpec typecheck(TypeSpec expected);
-    Symbol* codegen(Symbol* dest = NULL);
-
-    FunctionSymbol* func() const { return (FunctionSymbol*)m_sym; }
-    ref args() const { return child(0); }
-
-    /// Is it a struct constructor?
-    bool is_struct_ctr() const { return m_sym && m_sym->is_structure(); }
-
-    /// Is it a user-defined function (as opposed to an OSL built-in)?
-    ///
-    bool is_user_function() const
-    {
-        return !is_struct_ctr() && user_function()
-               && !user_function()->is_builtin();
-    }
-
-    /// Pointer to the ASTfunction_declaration node that defines the user
-    /// function, or NULL if it's not a user-defined function.
-    ASTfunction_declaration* user_function() const
-    {
-        return func() ? (ASTfunction_declaration*)func()->node() : nullptr;
-    }
-
-private:
-    /// Handle all the special cases for built-ins.  This includes
-    /// irregular patterns of which args are read vs written, special
-    /// checks for printf- and texture-like, etc.
-    void typecheck_builtin_specialcase();
-
-    /// Make sure the printf-like format string matches the list of
-    /// arguments pointed to by arg.  If ok, return true, otherwise
-    /// return false and call an appropriate error().
-    bool typecheck_printf_args(const char* format, ASTNode* arg);
-
-    /// Handle "funcion calls" that are really struct ctrs.
-    TypeSpec typecheck_struct_constructor();
-
-    /// Is the argument number 'arg' read by the op?
-    ///
-    bool argread(int arg) const;
-    /// Is the argument number 'arg' written by the op?
-    ///
-    bool argwrite(int arg) const;
-    /// Declare that argument number 'arg' is read by this op.
-    ///
-    void argread(int arg, bool val)
-    {
-        if (arg < 32) {
-            if (val)
-                m_argread |= (1 << arg);
-            else
-                m_argread &= ~(1 << arg);
-        }
-    }
-    /// Declare that argument number 'arg' is written by this op.
-    ///
-    void argwrite(int arg, bool val)
-    {
-        if (arg < 32) {
-            if (val)
-                m_argwrite |= (1 << arg);
-            else
-                m_argwrite &= ~(1 << arg);
-        }
-    }
-    /// Declare that argument number 'arg' is only written (not read!) by
-    /// this op.
-    void argwriteonly(int arg)
-    {
-        argread(arg, false);
-        argwrite(arg, true);
-    }
-    /// Declare optional arguments as outputs (write only) by this op.
-    ///
-    void mark_optional_output(int firstopt, const char** tags);
-    /// Declare that argument number 'arg' takes derivatives.
-    ///
-    void argtakesderivs(int arg, bool val)
-    {
-        if (arg < 32) {
-            if (val)
-                m_argtakesderivs |= (1 << arg);
-            else
-                m_argtakesderivs &= ~(1 << arg);
-        }
-    }
-
-    void codegen_arg(SymbolPtrVec& argdest, SymbolPtrVec& index,
-                     SymbolPtrVec& index1, SymbolPtrVec& index2, int argnum,
-                     ASTNode* arg, ASTNode* form, const TypeSpec& formaltype,
-                     bool writearg, bool& indexed_output_params);
-
-
-    /// Call compiler->struct_field_pair for each field in the struct.
-    ///
-    void struct_pair_all_fields(StructSpec* structspec, ustring formal,
-                                ustring actual, Symbol* arrayindex = NULL);
-
-    ustring m_name;                 ///< Name of the function being called
-    Symbol* m_sym;                  ///< Symbol of the function
-    FunctionSymbol* m_poly;         ///< The specific polymorphic variant
-    unsigned int m_argread;         ///< Bit field - which args are read
-    unsigned int m_argwrite;        ///< Bit field - which args are written
-    unsigned int m_argtakesderivs;  ///< Bit field - which args take derivs
-};
 
 
 
-class ASTliteral final : public ASTNode {
-public:
-    ASTliteral(OSLCompilerImpl* comp, int i)
-        : ASTNode(literal_node, comp), m_i(i)
-    {
-        m_typespec = TypeDesc::TypeInt;
-    }
-
-    ASTliteral(OSLCompilerImpl* comp, float f)
-        : ASTNode(literal_node, comp), m_f(f)
-    {
-        m_typespec = TypeDesc::TypeFloat;
-    }
-
-    ASTliteral(OSLCompilerImpl* comp, ustring s)
-        : ASTNode(literal_node, comp), m_s(s)
-    {
-        m_typespec = TypeDesc::TypeString;
-    }
-
-    const char* nodetypename() const { return "literal"; }
-    const char* childname(size_t i) const;
-    void print(std::ostream& out, int indentlevel) const;
-    TypeSpec typecheck(TypeSpec /*expected*/) { return m_typespec; }
-    Symbol* codegen(Symbol* dest = NULL);
-
-    const char* strval() const { return m_s.c_str(); }
-    int intval() const { return m_i; }
-    float floatval() const { return m_typespec.is_int() ? (float)m_i : m_f; }
-    ustring ustrval() const { return m_s; }
-
-    void negate()
-    {
-        m_i = -m_i;
-        m_f = -m_f;
-    }
-
-private:
-    ustring m_s;
-    int m_i;
-    float m_f;
-};
 
 
 

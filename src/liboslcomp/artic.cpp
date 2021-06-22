@@ -295,15 +295,26 @@ ArticTranspiler::transpile_shader_declaration(ASTshader_declaration* node)
     source->pop_indent();
     source->add_source_with_indent("}\n\n");
 
-    source->add_source_with_indent("fn make_", shadername, "_in -> ",
+    source->add_source_with_indent("fn make_", shadername, "_in() -> ",
                                    shadername, "_in {\n");
     source->push_indent();
+    for(auto v: inputs) {
+
+        source->add_source_with_indent("let ", v->name().string(), " = ");
+        if(v->init()->nodetype() == ASTNode::NodeType::literal_node){
+            //TODO: wtf is happening here?
+            auto lit = ASTtype_constructor((ASTliteral*)v->init().get());
+            dispatch_node(&lit);
+        } else {
+            dispatch_node(v->init());
+        }
+        source->add_source(";\n");
+    }
+
     source->add_source_with_indent(shadername, "_in{\n");
     source->push_indent();
     for (auto v : inputs) {
-        source->add_source_with_indent(v->name().string(), " = ");
-        dispatch_node(v->init());
-        source->add_source(",\n");
+        source->add_source_with_indent(v->name().string(), " = ", v->name().string(), ",\n");
     }
     source->pop_indent();
     source->add_source_with_indent("}\n");
@@ -416,7 +427,13 @@ ArticTranspiler::transpile_index(ASTindex* node)
 void
 ArticTranspiler::transpile_structureselection(ASTstructselect* node)
 {
-    NOT_IMPLEMENTED;
+
+    if(node->compindex()){
+        dispatch_node(node->compindex());
+    } else {
+        dispatch_node(node->lvalue());
+        source->add_source(".", node->field().string());
+    }
 }
 
 void
@@ -516,7 +533,7 @@ ArticTranspiler::transpile_unary_expression(ASTunary_expression* node)
 void
 ArticTranspiler::transpile_assign_expression(ASTassign_expression* node)
 {
-    source->add_source("");
+
     dispatch_node(node->var());
     source->add_source(" = ");
     dispatch_node(node->expr());
@@ -524,8 +541,15 @@ ArticTranspiler::transpile_assign_expression(ASTassign_expression* node)
 void
 ArticTranspiler::transpile_ternary_expression(ASTternary_expression* node)
 {
-    NOT_IMPLEMENTED;
+    source->add_source("if (");
+    dispatch_node(node->cond());
+    source->add_source(") {");
+    dispatch_node(node->trueexpr());
+    source->add_source("} else {");
+    dispatch_node(node->falseexpr());
+    source->add_source("}");
 }
+
 void
 ArticTranspiler::transpile_comma_operator(ASTcomma_operator* node)
 {
@@ -541,7 +565,10 @@ ArticTranspiler::transpile_typecast_expression(ASTtypecast_expression* node)
 void
 ArticTranspiler::transpile_type_constructor(ASTtype_constructor* node)
 {
-    if(node->typespec().is_float() || node->typespec().is_int()){
+    // copy-constructor
+    if(node->typespec() == node->args()->typespec() && !node->args()->next()){
+        dispatch_node(node->args());
+    } else if(node->typespec().is_float() || node->typespec().is_int()){
         dispatch_node(node->args());
     } else {
         std::vector<ASTNode::ref> args = {};
@@ -572,8 +599,7 @@ void
 ArticTranspiler::transpile_function_call(ASTfunction_call* node)
 {
     if (node->is_struct_ctr()) {
-        auto constructor = ASTtype_constructor(nullptr, node->typespec(),
-                                               node->args().get());
+        auto constructor = ASTtype_constructor(node);
         transpile_type_constructor(&constructor);
     } else {
         std::vector<ASTNode::ref> args = {};
@@ -637,5 +663,7 @@ ArticTranspiler::add_string_constant(const std::string& s)
 {
     const_strings.insert(s);
 }
+
+
 
 OSL_NAMESPACE_EXIT

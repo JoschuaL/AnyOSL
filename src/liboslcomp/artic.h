@@ -77,7 +77,7 @@ class ArticTranspiler {
 
 public:
 
-    ArticTranspiler(ArticSource* source) : source(source) {}
+    ArticTranspiler(ArticSource* source, OSLCompiler* compiler) : source(source) {}
     void dispatch_node(ASTNode::ref);
 
 private:
@@ -132,6 +132,8 @@ private:
     std::string get_arg_name(TypeSpec typeSpec, int argnum);
 
     void add_string_constant(const std::string& s);
+
+
 
 
 

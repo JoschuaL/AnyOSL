@@ -1,0 +1,25 @@
+struct Test_struct{
+    color rgb;
+    float alpha;    
+};
+
+struct Nested_Test_struct{
+    Test_struct s;
+    float beta;   
+};
+
+int test_function(Test_struct a, Nested_Test_struct b){
+    return (int) -(a.alpha + b.beta);   
+}
+
+
+
+shader test_shader(Test_struct a = Test_struct(0, 0), Nested_Test_struct b = Nested_Test_struct(a, 1), output float out = -1.0){
+    point p = point(1,2,3);
+    point p2 = point(p);
+    out = a.rgb.r + (test_function(a, b) > 0 ? 1 : 2);
+}
+
+
+
+
