@@ -111,6 +111,7 @@ artic_simpletype(TypeDesc st)
     if (st.is_unknown()) {
         NOT_IMPLEMENTED;
     }
+
     std::string start = "";
     std::string end   = "";
     if (st.is_array()) {
@@ -141,6 +142,8 @@ artic_simpletype(TypeDesc st)
         start += "String";
     } else if (st.is_floating_point()) {
         start += "f32";
+    } else if(st.basetype == 1){
+        start += "()";
     } else {
         if (st.is_signed()) {
             start += "i";
@@ -278,6 +281,7 @@ ArticTranspiler::dispatch_node(ASTNode::ref n)
 void
 ArticTranspiler::transpile_shader_declaration(ASTshader_declaration* node)
 {
+    this->in_shader = true;
     auto shadername = node->shadername().string();
     source->add_source_with_indent("struct ", shadername, "_in {\n");
     source->push_indent();
@@ -352,6 +356,7 @@ ArticTranspiler::transpile_shader_declaration(ASTshader_declaration* node)
     source->add_source_with_indent("}\n");
     source->pop_indent();
     source->add_source_with_indent("}\n\n");
+    this->in_shader = false;
 }
 
 void
@@ -372,12 +377,14 @@ ArticTranspiler::transpile_statement_list(ASTNode::ref node)
 void
 ArticTranspiler::transpile_function_declaration(ASTfunction_declaration* node)
 {
+    bool is = this->in_shader;
+    this->in_shader = false;
     if(!node->is_builtin()){
         source->add_source("fn @", node->func()->name().string(), "(");
         auto formal_node = node->formals();
         while(formal_node) {
             auto decl = (ASTvariable_declaration*) formal_node.get();
-            source->add_source(decl->name().string(), ": ", get_artic_type_string(formal_node), ", ");
+            source->add_source(decl->name().string(), ": ", decl->is_output() ? "&mut " : "", get_artic_type_string(formal_node), ", ");
             formal_node = formal_node->next();
         }
         source->add_source(") ->", get_artic_type_string(node), "{\n");
@@ -386,6 +393,7 @@ ArticTranspiler::transpile_function_declaration(ASTfunction_declaration* node)
         source->pop_indent();
         source->add_source("}\n\n");
     }
+    this->in_shader = is;
 }
 
 void
@@ -395,7 +403,13 @@ ArticTranspiler::transpile_variable_declaration(ASTvariable_declaration* node)
                                    get_artic_type_string(node));
     if (node->init()) {
         source->add_source(" = ");
-        dispatch_node(node->init());
+        if(node->init()->nodetype() != ASTNode::NodeType::type_constructor_node) {
+            auto cons = new ASTtype_constructor(node->typespec(), node->init().get());
+            dispatch_node(cons);
+        } else {
+            dispatch_node(node->init());
+        }
+
     }
 }
 void
@@ -434,9 +448,16 @@ ArticTranspiler::transpile_index(ASTindex* node)
 {
     auto lval = node->lvalue();
     dispatch_node(lval);
-    source->add_source("[");
-    dispatch_node(node->index());
-    source->add_source("]");
+    if(lval->typespec().is_triple()){
+        source->add_source(".index(");
+        dispatch_node(node->index());
+        source->add_source(")");
+    } else {
+        source->add_source("[");
+        dispatch_node(node->index());
+        source->add_source("]");
+    }
+
 }
 void
 ArticTranspiler::transpile_structureselection(ASTstructselect* node)
@@ -559,7 +580,13 @@ ArticTranspiler::transpile_unary_expression(ASTunary_expression* node)
 void
 ArticTranspiler::transpile_assign_expression(ASTassign_expression* node)
 {
-
+    auto ref = (ASTvariable_ref*) node->var().get();
+    auto decl = (ASTvariable_declaration*) ref->sym()->node();
+    if(decl){
+        if(decl->is_output() && !this->in_shader){
+            source->add_source("*");
+        }
+    }
     dispatch_node(node->var());
     source->add_source(" = ");
     dispatch_node(node->expr());
@@ -596,6 +623,9 @@ ArticTranspiler::transpile_type_constructor(ASTtype_constructor* node)
         return;
     } else if(node->typespec().is_float() ||node->typespec().is_int()){ // initializing trivially with literal
         dispatch_node(node->args());
+        return;
+    } else if(node->typespec().is_closure() && node->args()->typespec().is_int()){
+        source->add_source("EMPTY_CLOSURE");
         return;
     }
 
@@ -655,9 +685,23 @@ ArticTranspiler::transpile_function_call(ASTfunction_call* node)
             arg_node = arg_node->next();
         }
         source->add_source(node->opname(), "(");
-        for (auto arg : args) {
+        auto func_node = node->user_function();
+        ASTvariable_declaration* argnode = nullptr;
+        if(func_node){
+            argnode = (ASTvariable_declaration*) func_node->formals().get();
+        }
+        for(auto arg: args) {
+            if(argnode){
+                if(argnode->is_output()){
+                    source->add_source("&mut ");
+                }
+                argnode = (ASTvariable_declaration*) argnode->next().get();
+            }
             dispatch_node(arg);
             source->add_source(", ");
+        }
+        for (auto arg : args) {
+
         }
         source->add_source(")");
     }
@@ -671,7 +715,11 @@ ArticTranspiler::transpile_literal_node(ASTliteral* node)
         source->add_source(std::to_string(node->floatval()));
     } else if (node->typespec().is_string()) {
         add_string_constant(node->strval());
-        source->add_source("Strings::", node->strval());
+        std::string sval = node->strval();
+        if(sval.empty()) {
+            sval = "empty_string";
+        }
+        source->add_source("String::", sval);
     } else {
         NOT_IMPLEMENTED;
     }

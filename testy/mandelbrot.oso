@@ -1,0 +1,35 @@
+OpenShadingLanguage 1.00
+# Compiled by oslc 1.12.2dev
+# options: -O2 -o /home/misha/projects/OpenShadingLanguage/testy/mandelbrot.oso
+shader SimpleMaterial
+param	color	diffuse_color	0.600000024 0.600000024 0.600000024		%read{5,5} %write{2147483647,-1}
+param	float	noise_factor	0.5		%read{4,4} %write{2147483647,-1}
+oparam	closure color	bsdf			%read{2147483647,-1} %write{0,7} %initexpr
+global	point	P	%read{2,2} %write{2147483647,-1}
+global	normal	N	%read{0,6} %write{2147483647,-1}
+local	color	material_color	%read{7,7} %write{5,5}
+const	string	$const1	"diffuse"		%read{0,6} %write{2147483647,-1}
+temp	color	$tmp1	%read{5,5} %write{4,4}
+const	float	$const2	1		%read{1,1} %write{2147483647,-1}
+temp	color	$tmp2	%read{4,4} %write{1,1}
+temp	color	$tmp3	%read{4,4} %write{3,3}
+const	float	$const3	10		%read{2,2} %write{2147483647,-1}
+temp	point	$tmp4	%read{3,3} %write{2,2}
+temp	closure color	$tmp5	%read{7,7} %write{6,6}
+code bsdf
+# /home/misha/projects/OpenShadingLanguage/testy/lambert.osl:6
+#     output closure color bsdf = diffuse(N))
+	closure		bsdf $const1 N 	%filename{"/home/misha/projects/OpenShadingLanguage/testy/lambert.osl"} %line{6} %argrw{"wrr"}
+code ___main___
+# /home/misha/projects/OpenShadingLanguage/testy/lambert.osl:8
+#    color material_color = diffuse_color * mix(1.0, noise(P * 10.0), noise_factor);
+	assign		$tmp2 $const2 	%filename{"/home/misha/projects/OpenShadingLanguage/testy/lambert.osl"} %line{8} %argrw{"wr"}
+	mul		$tmp4 P $const3 	%argrw{"wrr"}
+	noise		$tmp3 $tmp4 	%argrw{"wr"}
+	mix		$tmp1 $tmp2 $tmp3 noise_factor 	%argrw{"wrrr"}
+	mul		material_color diffuse_color $tmp1 	%argrw{"wrr"}
+# /home/misha/projects/OpenShadingLanguage/testy/lambert.osl:9
+#    bsdf = material_color * diffuse(N);
+	closure		$tmp5 $const1 N 	%line{9} %argrw{"wrr"}
+	mul		bsdf $tmp5 material_color 	%argrw{"wrr"}
+	end

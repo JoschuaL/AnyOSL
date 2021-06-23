@@ -83,6 +83,7 @@ public:
 
 private:
 
+    bool in_shader = false;
 
     void transpile_shader_declaration(ASTshader_declaration* node);
 
