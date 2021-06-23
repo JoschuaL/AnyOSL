@@ -1046,6 +1046,11 @@ ASTNode::check_symbol_writeability(ASTNode* var)
     }
     return true;
 }
+bool
+ASTNode::is_std_node()
+{
+    return this->sourcefile().find("stdosl.h") != std::string::npos;
+}
 
 
 
@@ -1259,6 +1264,12 @@ ASTbinary_expression::opword() const
         return "unknown";
     }
     // clang-format on
+}
+
+bool
+ASTbinary_expression::is_boolean_operator()
+{
+    return (m_op == And || m_op == Or);
 }
 
 

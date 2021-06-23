@@ -470,6 +470,17 @@ OSLCompilerImpl::compile(string_view filename,
 
             ArticSource artic_source("  ");
             ArticTranspiler artic_transpiler(&artic_source, nullptr);
+            for(auto sym: this->symtab()){
+                if(sym->is_structure()){
+                    artic_transpiler.generate_struct_definition(sym->typespec());
+                } else if(sym->node() && sym->node()->nodetype() != ASTNode::NodeType::variable_declaration_node){
+                    auto node = sym->node();
+                    if(!node->is_std_node()){
+                        artic_transpiler.dispatch_node(node);
+                    }
+                }
+
+            }
             artic_transpiler.dispatch_node(shader());
             artic_source.print();
 

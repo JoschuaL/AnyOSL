@@ -595,6 +595,7 @@ ASTbinary_expression::typecheck(TypeSpec expected)
 
 
 
+
 TypeSpec
 ASTternary_expression::typecheck(TypeSpec expected)
 {

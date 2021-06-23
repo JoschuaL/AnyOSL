@@ -251,6 +251,8 @@ public:
     /// with caution!
     ASTNode* nextptr() const { return m_next.get(); }
 
+    bool is_std_node();
+
 protected:
     void indent(std::ostream& out, int indentlevel = 0) const
     {
@@ -926,7 +928,7 @@ public:
     }
 
     ASTtype_constructor(ASTfunction_call* fc): ASTtype_constructor(fc->m_compiler, fc->m_typespec, fc->args().get()){}
-    ASTtype_constructor(ASTliteral* lit): ASTtype_constructor(lit->m_compiler, lit->m_typespec, lit){}
+    ASTtype_constructor(TypeSpec to_init_type, ASTNode* init_node): ASTtype_constructor(init_node->m_compiler, to_init_type, init_node){}
 
     const char* nodetypename() const { return "type_constructor"; }
     const char* childname(size_t i) const;
@@ -1019,6 +1021,8 @@ public:
     const char* opword() const;
     TypeSpec typecheck(TypeSpec expected);
     Symbol* codegen(Symbol* dest = NULL);
+
+    bool is_boolean_operator();
 
     ref left() const { return child(0); }
     ref right() const { return child(1); }

@@ -79,6 +79,7 @@ public:
 
     ArticTranspiler(ArticSource* source, OSLCompiler* compiler) : source(source) {}
     void dispatch_node(ASTNode::ref);
+    void generate_struct_definition(TypeSpec typeSpec);
 
 private:
 
@@ -128,6 +129,8 @@ private:
     void transpile_literal_node(ASTliteral* node);
 
     void transpile_statement_list(ASTNode::ref node);
+
+    void dispath_constructor_argument(TypeSpec ts, ASTNode::ref arg, int i);
 
     std::string get_arg_name(TypeSpec typeSpec, int argnum);
 
