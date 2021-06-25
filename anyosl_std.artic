@@ -1,0 +1,150 @@
+struct Vector {
+    x: f32,
+    y: f32,
+    z: f32,
+}
+
+type Normal = Vector;
+type Point = Vector;
+type Color = Vector;
+
+struct shader_inout {
+    P: Point,
+    I: Vector,
+    N: Normal,
+    Ng: Normal,
+    u: f32,
+    v: f32,
+    dPdu: Vector,
+    dPdv: Vector,
+    Ps: Point,
+    time: f32,
+    dtime: f32,
+    dPdtime: Vector,
+    Ci: Closure,
+}
+
+
+struct Ops_Scalar[T]{
+    add: fn(T, T) -> T,
+    sub: fn(T, T) -> T,
+    mul: fn(T, T) -> T,
+    div: fn(T, T) -> T,
+    mul_Vector: fn(T, Vector) -> Vector,
+}
+
+struct Ops_Triple{
+    add: fn(Vector, Vector) -> Vector,
+    mul: fn(Vector, Vector) -> Vector,
+    sub: fn(Vector, Vector) -> Vector,
+    div: fn(Vector, Vector) -> Vector,
+    mul_float: fn(Vector, f32) -> Vector
+}
+
+struct Array[T]{
+    arr: T,
+    size: i32
+}
+
+
+
+
+fn @ops_f32() -> Ops_Scalar[f32]{
+    Ops_Scalar[f32]{
+        add = @|x,y|{x+y},
+        sub = @|x,y|{x-y},
+        mul = @|x,y|{x*y},
+        div = @|x,y|{x/y},
+        mul_Vector = @|x,y|{ops_Vector().mul_float(y,x)}
+    }
+}
+
+fn @ops_i32(){
+    Ops_Scalar[f32]{
+        add = @|x,y|{x+y},
+        sub = @|x,y|{x-y},
+        mul = @|x,y|{x*y},
+        div = @|x,y|{x/y},
+        mul_Vector = @|x,y|{ops_Vector().mul_float(y,x)}
+    }
+}
+
+
+fn @make_vector(x:f32, y:f32, z:f32) -> Vector {
+    Vector{
+        x = x, y = y, z = z,
+    }
+}
+
+fn @map_vector(v: Vector, func: fn(f32) -> f32) -> Vector {
+    Vector{
+        x = func(v.x), y = func(v.y), z = func(v.z)
+    }
+}
+
+fn @zip_vector(u: Vector, v: Vector, func: fn(f32, f32) -> f32) -> Vector {
+    Vector{
+        x = @func(u.x, v.x), y = @func(u.y, v.y), z = @func(u.z, v.z)
+    }
+}
+
+
+
+fn @ops_Vector() -> Ops_Triple {
+    Ops_Triple{
+        add = @|x,y|{zip_vector(x, y, ops_f32().add)},
+        sub = @|x,y|{zip_vector(x, y, ops_f32().sub)},
+        mul = @|x,y|{zip_vector(x, y, ops_f32().mul)},
+        div = @|x,y|{zip_vector(x, y, ops_f32().div)},
+        mul_float = @|x: Vector,y: f32|{map_vector(x, |f: f32|{f * y})}
+    }
+}
+
+fn @ops_Point() -> Ops_Triple {
+    ops_Vector()
+}
+
+fn @ops_Normal() -> Ops_Triple {
+    ops_Vector()
+}
+
+fn @ops_Color() -> Ops_Triple {
+    ops_Vector()
+}
+
+fn @index(v: Vector, i: i32) -> f32 {
+    match i {
+        0 => v.x,
+        1 => v.y,
+        _ => v.z
+    }
+}
+
+fn @dot(a: Vector, b: Vector) -> f32 {
+    a.x * b.x + a.y * b.y + a.z * b.z
+}
+
+fn @pow(f: f32, p: f32) -> f32{
+    1.0
+}
+
+fn @log10(i: f32){
+    i
+}
+
+fn @reflect(I: Vector, N: Vector, inout: shader_inout) -> Vector {
+    ops_Vector().sub(
+        I,
+        ops_Vector().mul_float(
+            N,
+            2 * dot(N, I)
+        )
+    )
+}
+
+fn @zerovec(){
+    Vector{x = 0, y = 0, z = 0}
+}
+
+
+

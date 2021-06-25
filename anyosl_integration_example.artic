@@ -1,0 +1,56 @@
+enum String{
+    linear
+}
+
+struct Closure{
+    eval: fn(Vector, Vector) -> (Vector, f32),
+    sample: fn(Vector, Vector) -> (Vector, f32, Vector),
+    pdf: fn(Vector, Vector) -> f32
+}
+
+struct ClosureOps{
+    mul_Vector: fn(Closure, Color) -> Closure
+}
+
+fn @ops_Closure(){
+    ClosureOps{
+        mul_Vector = |clos, col|{
+            Closure{
+                eval = |indir, outdir|{
+                    let (bsdf, pdf) = @clos.eval(indir, outdir);
+                    (ops_Vector().mul(bsdf, col), pdf)
+                },
+                sample = clos.sample,
+                pdf = clos.pdf
+            }
+        }
+    }
+}
+
+fn @black(inv: Vector, outv: Vector) -> (Vector, f32){
+    (make_vector(0,0,0), 0)
+}
+
+fn @zero(u: Vector, v: Vector) -> f32{
+    0
+}
+
+fn @no_sample(inv: Vector, outv: Vector) -> (Vector, f32, Vector){
+    (zerovec(), 0, zerovec())
+}
+
+fn @reflection(N: Normal, eta: f32, inout: shader_inout) -> Closure{
+    Closure{
+        eval = black,
+        sample = |input, rnd|{(reflect(input, N, inout), 1.0, make_vector(1,1,1))},
+        pdf = zero
+    }
+}
+
+fn @empty_closure(){
+    Closure{
+        eval = black,
+        sample = no_sample,
+        pdf = zero
+    }
+}

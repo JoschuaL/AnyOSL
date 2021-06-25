@@ -452,6 +452,7 @@ public:
     ref metadata() const { return child(0); }
     ref formals() const { return child(1); }
     ref statements() const { return child(2); }
+    ShaderType shadertype();
     ustring shadername() const { return m_shadername; }
     string_view shadertypename() const;
 

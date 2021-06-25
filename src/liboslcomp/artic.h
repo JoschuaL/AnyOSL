@@ -133,6 +133,10 @@ private:
 
     void dispath_constructor_argument(TypeSpec ts, ASTNode::ref arg, int i);
 
+    void emit_shaderinout_copy();
+
+    void emit_shaderinout_constructor();
+
     std::string get_arg_name(TypeSpec typeSpec, int argnum);
 
     void add_string_constant(const std::string& s);

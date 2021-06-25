@@ -374,6 +374,11 @@ ASTshader_declaration::shadertypename() const
 {
     return OSL::pvt::shadertypename((ShaderType)m_op);
 }
+ShaderType
+ASTshader_declaration::shadertype()
+{
+    return (ShaderType)m_op;
+}
 
 
 

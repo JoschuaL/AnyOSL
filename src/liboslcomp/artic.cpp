@@ -21,6 +21,14 @@ artic_type_string_to_string(std::string in)
         tstring.replace(pos, 1, "_");
     }
 
+    while ((pos = tstring.find(']')) != std::string::npos) {
+        tstring.replace(pos, 1, "_");
+    }
+
+    while ((pos = tstring.find('*')) != std::string::npos) {
+        tstring.replace(pos, 1, "_");
+    }
+
     while ((pos = tstring.find('<')) != std::string::npos) {
         tstring.replace(pos, 1, "_");
     }
@@ -41,7 +49,7 @@ artic_string(TypeSpec typeSpec, int array_size)
         start += "[";
 
         start += artic_string(typeSpec.elementtype(), 0);
-        end += ";";
+        end += "*";
 
         if (typeSpec.is_sized_array()) {
             end += std::to_string(typeSpec.arraylength());
@@ -117,25 +125,14 @@ artic_simpletype(TypeDesc st)
     if (st.is_array()) {
         start += "[";
         if (st.is_sized_array()) {
-            end += ";";
+            end += "*";
             end += std::to_string(st.arraylen);
         }
         end += "]";
     }
 
     if (st.elementtype().is_vec3(TypeDesc::FLOAT)) {
-        auto ste = st.elementtype();
-        if (ste == TypeDesc::TypeColor) {
-            start += "Color";
-        } else if (ste == TypeDesc::TypePoint) {
-            start += "Point";
-        } else if (ste == TypeDesc::TypeVector) {
-            start += "Vector";
-        } else if (ste == TypeDesc::TypeNormal) {
-            start += "Normal";
-        } else {
-            NOT_IMPLEMENTED;
-        }
+        start += "Vector";
     } else if (st == TypeDesc::TypeMatrix) {
         start += "Matrix";
     } else if (st == TypeDesc::TypeString) {
@@ -282,6 +279,8 @@ void
 ArticTranspiler::transpile_shader_declaration(ASTshader_declaration* node)
 {
     this->in_shader = true;
+    ShaderType st = node->shadertype();
+    std::string ststring = shadertypename(st);
     auto shadername = node->shadername().string();
     source->add_source_with_indent("struct ", shadername, "_in {\n");
     source->push_indent();
@@ -303,8 +302,7 @@ ArticTranspiler::transpile_shader_declaration(ASTshader_declaration* node)
                                    shadername, "_in {\n");
     source->push_indent();
     for(auto v: inputs) {
-
-        source->add_source_with_indent("let ", v->name().string(), " = ");
+        source->add_source_with_indent("let ", v->name().string(), ": ", get_artic_type_string(v) , " = ");
         if(v->init()->nodetype() == ASTNode::NodeType::literal_node){
             //TODO: wtf is happening here?
             auto lit = new ASTtype_constructor(v->typespec(), v->init().get());
@@ -335,25 +333,30 @@ ArticTranspiler::transpile_shader_declaration(ASTshader_declaration* node)
     source->pop_indent();
     source->add_source_with_indent("}\n\n");
 
-    source->add_source_with_indent("fn ", shadername, "_impl(in: ", shadername,
-                                   "_in) -> ", shadername, "_out {\n");
+    source->add_source_with_indent("fn @", shadername, "_impl(arg_in: ", shadername,
+                                   "_in, inout : shader_inout) -> (", shadername, "_out, shader_inout) {\n");
     source->push_indent();
     for (auto v : inputs) {
         source->add_source_with_indent("let ", v->is_output() ? "mut " : "",
-                                       v->name().string(), " = in.",
+                                       v->name().string(), " = arg_in.",
                                        v->name().string(), ";\n");
     }
+    emit_shaderinout_copy();
 
     transpile_statement_list(node->statements());
 
-    source->add_source_with_indent(node->shadername().string(), "_out {\n");
+    source->add_source_with_indent("(", node->shadername().string(), "_out {\n");
     source->push_indent();
     for (auto v : outputs) {
         source->add_source_with_indent(v->name().string(), " = ",
                                        v->name().string(), ",\n");
     }
     source->pop_indent();
-    source->add_source_with_indent("}\n");
+    source->add_source_with_indent("},\n");
+
+    emit_shaderinout_constructor();
+    source->add_source(")\n");
+
     source->pop_indent();
     source->add_source_with_indent("}\n\n");
     this->in_shader = false;
@@ -387,8 +390,9 @@ ArticTranspiler::transpile_function_declaration(ASTfunction_declaration* node)
             source->add_source(decl->name().string(), ": ", decl->is_output() ? "&mut " : "", get_artic_type_string(formal_node), ", ");
             formal_node = formal_node->next();
         }
-        source->add_source(") ->", get_artic_type_string(node), "{\n");
+        source->add_source(", inout: shader_inout) ->", get_artic_type_string(node), "{\n");
         source->push_indent();
+        emit_shaderinout_copy();
         transpile_statement_list(node->statements());
         source->pop_indent();
         source->add_source("}\n\n");
@@ -447,12 +451,15 @@ void
 ArticTranspiler::transpile_index(ASTindex* node)
 {
     auto lval = node->lvalue();
-    dispatch_node(lval);
+
     if(lval->typespec().is_triple()){
-        source->add_source(".index(");
+        source->add_source("index(");
+        dispatch_node(lval);
+        source->add_source(", ");
         dispatch_node(node->index());
         source->add_source(")");
     } else {
+        dispatch_node(lval);
         source->add_source("[");
         dispatch_node(node->index());
         source->add_source("]");
@@ -561,8 +568,8 @@ ArticTranspiler::transpile_binary_expression(ASTbinary_expression* node)
     } else {
         source->add_source("ops_",
                            artic_type_string_to_string(
-                               artic_string(node->typespec(), 0)),
-                           ".", node->opword(), "(");
+                               get_artic_type_string(left)),
+                           "().", node->opword(), "_", get_artic_type_string(right) , "(");
         dispatch_node(left);
         source->add_source(", ");
         dispatch_node(right);
@@ -611,7 +618,7 @@ ArticTranspiler::transpile_comma_operator(ASTcomma_operator* node)
 void
 ArticTranspiler::transpile_typecast_expression(ASTtypecast_expression* node)
 {
-    source->add_source("ops_", get_artic_type_string(node->expr()), ".as_", get_artic_type_string(node), "(");
+    source->add_source("ops_", get_artic_type_string(node->expr()), "().as_", get_artic_type_string(node), "(");
     dispatch_node(node->expr());
     source->add_source(")");
 }
@@ -700,9 +707,7 @@ ArticTranspiler::transpile_function_call(ASTfunction_call* node)
             dispatch_node(arg);
             source->add_source(", ");
         }
-        for (auto arg : args) {
-
-        }
+        emit_shaderinout_constructor();
         source->add_source(")");
     }
 }
@@ -729,19 +734,13 @@ ArticTranspiler::transpile_literal_node(ASTliteral* node)
 std::string
 ArticTranspiler::get_arg_name(TypeSpec typeSpec, int argnum)
 {
-    if (typeSpec.is_triple() && !typeSpec.is_color()) {
+    if (typeSpec.is_triple()) {
         switch (argnum) {
         case 0: return "x";
         case 1: return "y";
         default: return "z";
         }
-    } else if (typeSpec.is_color()) {
-        switch (argnum) {
-        case 0: return "r";
-        case 1: return "g";
-        default: return "b";
-        }
-    } else if (typeSpec.is_structure()) {
+    }  else if (typeSpec.is_structure()) {
         auto structSpec = typeSpec.structspec();
         OSL_ASSERT(argnum < structSpec->numfields());
         auto fieldSpec = structSpec->field(static_cast<int>(argnum));
@@ -792,7 +791,47 @@ ArticTranspiler::generate_struct_definition(TypeSpec typeSpec)
         source->add_source_with_indent("}\n\n");
     }
 }
+void
+ArticTranspiler::emit_shaderinout_copy()
+{
 
+        source->add_source_with_indent("let mut P = inout.P;\n");
+        source->add_source_with_indent("let I = inout.I;\n");
+        source->add_source_with_indent("let mut N = inout.N;\n");
+        source->add_source_with_indent("let Ng = inout.Ng;\n");
+        source->add_source_with_indent("let dPdu = inout.dPdu;\n");
+        source->add_source_with_indent("let dPdv = inout.dPdv;\n");
+        source->add_source_with_indent("let Ps = inout.Ps;\n");
+        source->add_source_with_indent("let u = inout.u;\n");
+        source->add_source_with_indent("let v = inout.v;\n");
+        source->add_source_with_indent("let time = inout.time;\n");
+        source->add_source_with_indent("let dtime = inout.dtime;\n");
+        source->add_source_with_indent("let dPdtime = inout.dPdtime;\n");
+        source->add_source_with_indent("let mut Ci = inout.Ci;\n");
+
+}
+void
+ArticTranspiler::emit_shaderinout_constructor()
+{
+
+    source->add_source_with_indent("shader_inout {\n");
+    source->push_indent();
+        source->add_source_with_indent("P = P,\n");
+        source->add_source_with_indent("I = I,\n");
+        source->add_source_with_indent("N = N,\n");
+        source->add_source_with_indent("Ng = Ng,\n");
+        source->add_source_with_indent("dPdu = dPdu,\n");
+        source->add_source_with_indent("dPdv = dPdv,\n");
+        source->add_source_with_indent("Ps = Ps,\n");
+        source->add_source_with_indent("u = u,\n");
+        source->add_source_with_indent("v = v,\n");
+        source->add_source_with_indent("time = time,\n");
+        source->add_source_with_indent("dtime = dtime,\n");
+        source->add_source_with_indent("dPdtime = dPdtime,\n");
+        source->add_source_with_indent("Ci = Ci,\n");
+    source->pop_indent();
+    source->add_source_with_indent("}");
+}
 
 
 

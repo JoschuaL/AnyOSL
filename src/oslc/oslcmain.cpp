@@ -156,7 +156,13 @@ main(int argc, const char* argv[])
             args.emplace_back(argv[a]);
         } else if (!strcmp(argv[a], "-buffer")) {
             compile_from_buffer = true;
-        } else {
+        } else if(!strcmp(argv[a], "-t") && a < argc - 1) {
+            args.emplace_back(argv[a]);
+            ++a;
+            args.emplace_back(argv[a]);
+        }
+
+        else {
             // Shader to compile
             shader_path = argv[a];
         }
