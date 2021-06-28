@@ -688,7 +688,9 @@ ASTpreincdec::childname(size_t i) const
     return name[i];
 }
 
-bool ASTpreincdec::is_increment(){
+bool
+ASTpreincdec::is_increment()
+{
     return m_op == Incr;
 }
 
@@ -1274,7 +1276,11 @@ ASTbinary_expression::opword() const
 bool
 ASTbinary_expression::is_boolean_operator()
 {
-    return (m_op == And || m_op == Or);
+    return (m_op == And || m_op == Or || m_op == Equal || m_op == NotEqual
+            || m_op == Greater || m_op == Less || m_op == GreaterEqual
+            || m_op == LessEqual || m_op == BitAnd || m_op == BitOr
+            || m_op == Xor || m_op == Compl || m_op == Not || m_op == ShiftLeft
+            || m_op == ShiftRight);
 }
 
 
@@ -1363,7 +1369,6 @@ ASTfunction_call::print(std::ostream& out, int indentlevel) const
     }
 #endif
 }
-
 
 
 

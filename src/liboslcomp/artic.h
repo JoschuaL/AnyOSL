@@ -31,7 +31,7 @@ const std::string
 artic_string(TypeSpec typeSpec, int array_size);
 
 int
-get_array_size(ASTNode* init);
+get_array_size(ASTNode::ref init);
 
 const std::string
 get_artic_type_string(ASTNode::ref node);
