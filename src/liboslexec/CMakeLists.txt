@@ -185,6 +185,7 @@ if (BUILD_SHARED_LIBS)
         ../liboslcomp/oslcomp.cpp
         ../liboslcomp/symtab.cpp
         ../liboslcomp/typecheck.cpp
+        ../liboslcomp/artic.cpp
         )
 endif ()
 
