@@ -1,0 +1,240 @@
+enum String{
+    linear,
+    constant
+}
+
+struct EvaluateIn{
+    indir: Vector,
+    outdir: Vector
+}
+
+struct EvaluateOut{
+    bsdf: Vector,
+    pdf: f32
+}
+
+struct SampleIn{
+    outdir: Vector,
+    rnd: Vector
+}
+
+struct SampleOut{
+    indir: Vector,
+    pdf: f32, 
+    bsdf_over_pdf: Vector
+}
+
+struct PdfIn{
+    indir: Vector,
+    outdir: Vector
+}
+
+type PdfOut = f32;
+
+type EvaluateFn = fn(EvaluateIn) -> EvaluateOut;
+type SampleFn = fn(SampleIn) -> SampleOut;
+type PdfFn = fn(PdfIn) -> PdfOut;
+
+struct Closure{
+    eval: EvaluateFn,
+    sample: SampleFn,
+    pdf: PdfFn
+}
+
+struct ClosureOps{
+    mul_Vector: fn(Closure, Color) -> Closure
+}
+
+fn @ops_Closure(){
+    ClosureOps{
+        mul_Vector = |clos, vec|{
+            Closure{
+                eval = |ein|{
+                    let mut eout = @clos.eval(ein);
+                    eout.bsdf = ops_Vector().mul_Vector(eout.bsdf, vec);
+                    eout
+                },
+                sample = clos.sample,
+                pdf = clos.pdf
+            }
+        }
+    }
+}
+
+fn @black(ein: EvaluateIn) -> EvaluateOut{
+    EvaluateOut{
+        bsdf = make_vector(0,0,0),
+        pdf = 0
+    }
+}
+
+
+
+fn @no_sample(sin: SampleIn) -> SampleOut{
+    SampleOut{
+        indir = make_vector(0,0,0),
+        pdf = 0,
+        bsdf_over_pdf = make_vector(0,0,0)
+    }
+}
+
+fn @zero(pin: PdfIn) -> PdfOut{
+    0
+}
+
+fn @reflection_Vector_f32__Closure(N: Normal, _eta: f32, inout: shader_inout) -> Closure{
+    Closure{
+        eval = black,
+        sample = |sin|{
+            SampleOut{
+                indir = reflect(sin.outdir, N, inout),
+                pdf = 1.0,
+                bsdf_over_pdf = make_vector(1,1,1)
+            }
+        },
+        pdf = zero
+    }
+}
+
+fn @empty_closure(){
+    Closure{
+        eval = black,
+        sample = no_sample,
+        pdf = zero
+    }
+}
+
+
+fn @diffuse_Vector__Closure(N: Normal, inout: shader_inout) -> Closure{
+    Closure{
+        eval = make_diffuse_eval(N, inout),
+        sample = make_diffuse_sample(N, inout),
+        pdf = make_diffuse_pdf(N, inout)
+    }
+}
+
+fn @make_diffuse_eval(N: Normal, inout: shader_inout) -> EvaluateFn {
+    |ein| {
+        let nk2 = max_f32_f32__f32(dot_Vector_Vector__f32(ein.indir, N, inout), 0.0, inout);
+        let pdf = nk2 * (1.0 / 3.1415927);
+        EvaluateOut{
+            bsdf = make_vector(pdf,pdf,pdf),
+            pdf = pdf
+        }
+    }
+}
+
+fn @sincos(x :f32) -> Vector{
+    make_vector(math_builtins::sin(x), math_builtins::cos(x), 0)
+}
+
+fn @cosine_hemisphere_sample(v: Vector) -> Vector{
+    if((v.x == 0.0) && (v.y == 0.0)){
+        return(make_vector(0.0, 1.0, 0.0))
+    }
+
+    let mut u = make_vector(v.x+v.x, v.y*v.y, 0);
+    if(u.x >= 1.0){
+        u.x -= 2.0;
+    }
+    if(u.y >= 1.0){
+        u.y -= 2.0;
+    }
+    let mut r: f32;
+    let mut phi: f32;
+    let mut y: f32 = 1.0;
+    if(u.x * u.x > u.y * u.y){
+        r = u.x;
+        y -= u.x * u.x;
+        phi = (-3.1415927 / 4.0) * (u.y / u.x) as f32;
+    } else {
+        r = u.y;
+        y -= u.y * u.y;
+        phi = (-3.1415927 / 2.0) + (3.1415927 / 4.0)  * (u.x / u.y);
+    }
+
+    if(y <= 0.0){
+        return (make_vector(0.0, 1.0, 0.0))
+    }
+    let temp = sincos(phi);
+    let si = temp.x;
+    let co = temp.y;
+    make_vector(r * si, math_builtins::sqrt(y), r*co)
+}
+
+fn @absorb_sample() -> SampleOut{
+    SampleOut{
+        indir = make_vector(0,0,0),
+        pdf = 0,
+        bsdf_over_pdf = make_vector(0,0,0)
+    }
+}
+
+fn @make_diffuse_sample(N: Normal, inout: shader_inout) -> SampleFn {
+    |sin|{
+
+        let cosh = cosine_hemisphere_sample(make_vector(sin.rnd.x, sin.rnd.y, 0));
+        
+
+        let indir = normalize_Vector__Vector(
+            ops_Vector().add_Vector(
+                ops_Vector().add_Vector(
+                    ops_Vector().mul_f32(
+                        inout.dPdu,
+                        cosh.x
+                    ),
+                    ops_Vector().mul_f32(
+                        N,
+                        cosh.y
+                    )
+                ),
+                ops_Vector().mul_f32(
+                    inout.dPdv,
+                    cosh.z
+                )
+            ),
+            inout
+        );
+
+        if(cosh.y <= 0.0 || dot_Vector_Vector__f32(indir, N, inout) <= 0.0){
+            absorb_sample()
+        } else {
+            let bsdf_over_pdf = make_vector(1,1,1);
+            let pdf = cosh.y * (1.0 / 3.1415927);
+            SampleOut{
+                indir = indir,
+                pdf = pdf,
+                bsdf_over_pdf = bsdf_over_pdf,
+            }
+        }
+
+
+
+    }
+}
+
+
+
+
+
+fn @get_oriented_normals(
+    geometry_normal: Vector,
+    shading_normal: Vector,
+    outdir: Vector,
+    inout: shader_inout
+) -> (Vector, Vector) {
+    let a = ops_Vector().mul_f32(geometry_normal, math_builtins::copysign[f32](1.0, dot_Vector_Vector__f32(outdir, geometry_normal, inout)));
+    let b = ops_Vector().mul_f32(shading_normal, math_builtins::copysign[f32](1.0, dot_Vector_Vector__f32(shading_normal, a, inout)));
+    (a, b)
+}
+
+
+fn @make_diffuse_pdf(N: Normal, inout: shader_inout) -> PdfFn {
+
+    |pin|{
+        let (geometry_normal, shading_normal) = get_oriented_normals(inout.Ng, N, pin.outdir, inout);
+        let nk2 = math_builtins::fmax[f32](dot_Vector_Vector__f32(pin.indir, shading_normal, inout), 0.0);
+        nk2 * (1.0 / 3.1415927)
+    }
+}
+

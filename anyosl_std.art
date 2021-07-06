@@ -1,0 +1,291 @@
+struct Vector {
+    x: f32,
+    y: f32,
+    z: f32,
+}
+
+type Normal = Vector;
+type Point = Vector;
+type Color = Vector;
+
+struct shader_inout {
+    P: Point,
+    I: Vector,
+    N: Normal,
+    Ng: Normal,
+    u: f32,
+    v: f32,
+    dPdu: Vector,
+    dPdv: Vector,
+    Ps: Point,
+    time: f32,
+    dtime: f32,
+    dPdtime: Vector,
+    Ci: Closure
+}
+
+
+struct OpsF32{
+    add_f32: fn(f32, f32) -> f32,
+    sub_f32: fn(f32, f32) -> f32,
+    mul_f32: fn(f32, f32) -> f32,
+    div_f32: fn(f32, f32) -> f32,
+    add_i32: fn(f32, i32) -> f32,
+    sub_i32: fn(f32, i32) -> f32,
+    mul_i32: fn(f32, i32) -> f32,
+    div_i32: fn(f32, i32) -> f32,
+    add_u32: fn(f32, u32) -> f32,
+    sub_u32: fn(f32, u32) -> f32,
+    mul_u32: fn(f32, u32) -> f32,
+    div_u32: fn(f32, u32) -> f32,
+    mul_Vector: fn(f32, Vector) -> Vector,
+/*    lt_f32: fn(f32, f32) -> bool,
+    gt_f32: fn(f32, f32) -> bool,
+    le_f32: fn(f32, f32) -> bool,
+    ge_f32: fn(f32, f32) -> bool,
+    eq_f32: fn(f32, f32) -> bool,
+    neq_f32: fn(f32, f32) -> bool,
+    mod_f32: fn(f32, f32) -> bool,
+    bitand_f32: fn(f32, f32) -> bool,
+    bitor_f32: fn(f32, f32) -> bool,
+    xor_f32: fn(f32, f32) -> bool,
+    shl_f32: fn(f32, f32) -> bool,
+    shr_f32: fn(f32, f32) -> bool,*/
+}
+
+struct OpsI32{
+    add_f32: fn(i32, f32) -> f32,
+    sub_f32: fn(i32, f32) -> f32,
+    mul_f32: fn(i32, f32) -> f32,
+    div_f32: fn(i32, f32) -> f32,
+    add_i32: fn(i32, i32) -> i32,
+    sub_i32: fn(i32, i32) -> i32,
+    mul_i32: fn(i32, i32) -> i32,
+    div_i32: fn(i32, i32) -> i32,
+    add_u32: fn(i32, u32) -> i32,
+    sub_u32: fn(i32, u32) -> i32,
+    mul_u32: fn(i32, u32) -> i32,
+    div_u32: fn(i32, u32) -> i32,
+    mul_Vector: fn(i32, Vector) -> Vector,
+}
+
+struct OpsU32{
+    add_f32: fn(u32, f32) -> f32,
+    sub_f32: fn(u32, f32) -> f32,
+    mul_f32: fn(u32, f32) -> f32,
+    div_f32: fn(u32, f32) -> f32,
+    add_i32: fn(u32, i32) -> u32,
+    sub_i32: fn(u32, i32) -> u32,
+    mul_i32: fn(u32, i32) -> u32,
+    div_i32: fn(u32, i32) -> u32,
+    add_u32: fn(u32, u32) -> u32,
+    sub_u32: fn(u32, u32) -> u32,
+    mul_u32: fn(u32, u32) -> u32,
+    div_u32: fn(u32, u32) -> u32,
+    mul_Vector: fn(u32, Vector) -> Vector,
+}
+
+struct Ops_Triple{
+    add_Vector: fn(Vector, Vector) -> Vector,
+    mul_Vector: fn(Vector, Vector) -> Vector,
+    sub_Vector: fn(Vector, Vector) -> Vector,
+    div_Vector: fn(Vector, Vector) -> Vector,
+    mul_f32: fn(Vector, f32) -> Vector,
+    mul_i32: fn(Vector, i32) -> Vector,
+    mul_u32: fn(Vector, u32) -> Vector
+}
+
+
+
+
+
+
+fn @ops_f32() -> OpsF32{
+    OpsF32{
+        add_f32 = @|x: f32,y: f32|{x+y},
+        sub_f32 = @|x: f32,y: f32|{x-y},
+        mul_f32 = @|x: f32,y: f32|{x*y},
+        div_f32 = @|x: f32,y: f32|{x/y},
+        add_i32 = @|x: f32,y: i32|{x+(y as f32)},
+        sub_i32 = @|x: f32,y: i32|{x-(y as f32)},
+        mul_i32 = @|x: f32,y: i32|{x*(y as f32)},
+        div_i32 = @|x: f32,y: i32|{x/(y as f32)},
+        add_u32 = @|x: f32,y: u32|{x+(y as f32)},
+        sub_u32 = @|x: f32,y: u32|{x-(y as f32)},
+        mul_u32 = @|x: f32,y: u32|{x*(y as f32)},
+        div_u32 = @|x: f32,y: u32|{x/(y as f32)},
+        mul_Vector = @|x: f32,y: Vector|{ops_Vector().mul_f32(y,x)}
+    }
+}
+
+fn @ops_i32(){
+    OpsI32{
+        add_f32 = @|x: i32,y: f32|{(x as f32)+y},
+        sub_f32 = @|x: i32,y: f32|{(x as f32)-y},
+        mul_f32 = @|x: i32,y: f32|{(x as f32)*y},
+        div_f32 = @|x: i32,y: f32|{(x as f32)/y},
+        add_i32 = @|x: i32,y: i32|{x+y},
+        sub_i32 = @|x: i32,y: i32|{x-y},
+        mul_i32 = @|x: i32,y: i32|{x*y},
+        div_i32 = @|x: i32,y: i32|{x/y},
+        add_u32 = @|x: i32,y: u32|{x+(y as i32)},
+        sub_u32 = @|x: i32,y: u32|{x-(y as i32)},
+        mul_u32 = @|x: i32,y: u32|{x*(y as i32)},
+        div_u32 = @|x: i32,y: u32|{x/(y as i32)},
+        mul_Vector = @|x: i32,y: Vector|{ops_Vector().mul_f32(y,x as f32)}
+    }
+}
+
+fn @ops_u32(){
+    OpsU32{
+        add_f32 = @|x: u32,y: f32|{(x as f32)+y},
+        sub_f32 = @|x: u32,y: f32|{(x as f32)-y},
+        mul_f32 = @|x: u32,y: f32|{(x as f32)*y},
+        div_f32 = @|x: u32,y: f32|{(x as f32)/y},
+        add_i32 = @|x: u32,y: i32|{x+(y as u32)},
+        sub_i32 = @|x: u32,y: i32|{x-(y as u32)},
+        mul_i32 = @|x: u32,y: i32|{x*(y as u32)},
+        div_i32 = @|x: u32,y: i32|{x/(y as u32)},
+        add_u32 = @|x: u32,y: u32|{x+y},
+        sub_u32 = @|x: u32,y: u32|{x-y},
+        mul_u32 = @|x: u32,y: u32|{x*y},
+        div_u32 = @|x: u32,y: u32|{x/y},
+        mul_Vector = @|x: u32,y: Vector|{ops_Vector().mul_f32(y,x as f32)}
+    }
+}
+
+
+fn @make_vector(x:f32, y:f32, z:f32) -> Vector {
+    Vector{
+        x = x, y = y, z = z,
+    }
+}
+
+fn @map_vector(v: Vector, func: fn(f32) -> f32) -> Vector {
+    Vector{
+        x = func(v.x), y = func(v.y), z = func(v.z)
+    }
+}
+
+fn @zip_vector(u: Vector, v: Vector, func: fn(f32, f32) -> f32) -> Vector {
+    Vector{
+        x = @func(u.x, v.x), y = @func(u.y, v.y), z = @func(u.z, v.z)
+    }
+}
+
+
+
+fn @ops_Vector() -> Ops_Triple {
+    Ops_Triple{
+        add_Vector = @|x,y|{zip_vector(x, y, ops_f32().add_f32)},
+        sub_Vector = @|x,y|{zip_vector(x, y, ops_f32().sub_f32)},
+        mul_Vector = @|x,y|{zip_vector(x, y, ops_f32().mul_f32)},
+        div_Vector = @|x,y|{zip_vector(x, y, ops_f32().div_f32)},
+        mul_f32 = @|x: Vector,y: f32|{map_vector(x, |f: f32|{f * y})},
+        mul_i32 = @|x: Vector,y: i32|{map_vector(x, |f: f32|{f * (y as f32)})},
+        mul_u32 = @|x: Vector,y: u32|{map_vector(x, |f: f32|{f * (y as f32)})},
+    }
+}
+
+fn @ops_Point() -> Ops_Triple {
+    ops_Vector()
+}
+
+fn @ops_Normal() -> Ops_Triple {
+    ops_Vector()
+}
+
+fn @ops_Color() -> Ops_Triple {
+    ops_Vector()
+}
+
+fn @index_Vector(v: Vector, i: i32) -> f32 {
+    match i {
+        0 => v.x,
+        1 => v.y,
+        _ => v.z
+    }
+}
+
+fn @index[T](arr: &[T], i: i32) -> T{
+    arr(i)
+}
+
+fn @dot_Vector_Vector__f32(a: Vector, b: Vector, _inout: shader_inout) -> f32 {
+    a.x * b.x + a.y * b.y + a.z * b.z
+}
+
+fn @pow_f32_f32__f32(x: f32, y: f32, inout: shader_inout) -> f32{
+    math_builtins::pow(x,y)
+}
+
+fn @log10_f32__f32(x: f32, inout: shader_inout) -> f32{
+    math_builtins::log10(x)
+}
+
+fn @max_f32_f32__f32(x: f32, y: f32, inout: shader_inout) -> f32{
+    math_builtins::fmax(x,y)
+}
+
+fn @min_f32_f32__f32(x: f32, y: f32, inout: shader_inout) -> f32{
+    math_builtins::fmin(x,y)
+}
+
+fn @normalize_Vector__Vector(v: Vector, inout: shader_inout) -> Vector{
+    let len = lensqr(v, inout);
+    let inverse = 1.0 / len;
+    ops_Vector().mul_f32(v, inverse)
+}
+
+fn @lensqr(v: Vector, inout: shader_inout) -> f32{
+    dot_Vector_Vector__f32(v,v, inout)
+}
+
+fn @length_Vector__f32(v: Vector, inout: shader_inout) -> f32{
+    math_builtins::sqrt(lensqr(v, inout))
+}
+
+
+
+
+fn @reflect(I: Vector, N: Vector, inout: shader_inout) -> Vector {
+    ops_Vector().sub_Vector(
+        I,
+        ops_Vector().mul_f32(
+            N,
+            2 * dot_Vector_Vector__f32(N, I, inout)
+        )
+    )
+}
+
+fn @zerovec(){
+    Vector{x = 0, y = 0, z = 0}
+}
+
+fn @spline_String_f32_VectorArray__Vector(basis: String, x: f32, arr: &[Vector], size: fn() -> i32, inout: shader_inout) -> Vector{
+    match(basis){
+        String::linear => linear_spline(x, arr, @size()),
+        _ => zerovec()
+    }
+}
+
+fn @linear_spline(x: f32, arr: &[Vector], s: i32) -> Vector{
+    let size = s - 3;
+    let sample = math_builtins::fmax[f32](math_builtins::fmin[f32](x, 1.0), 0.0);
+    let p1 = math_builtins::fmax[i32](math_builtins::fmin[i32]((x * size as f32) as i32, size - 3), 0);
+    let p2 = math_builtins::fmax[i32](math_builtins::fmin[i32](p1 + 1, size - 3), 0);
+    let d1 = (p1 as f32) * (1.0 / (size as f32));
+    let d2 = (p2 as f32) * (1.0 / (size as f32));
+    let distance = d2 - d1;
+    let interp = (x - d1) / (d2 - d1);
+    let v1 = ops_Vector().mul_f32(arr(p1), interp);
+    let v2 = ops_Vector().mul_f32(arr(p2), distance - interp);
+    ops_Vector().add_Vector(v1, v2)
+}
+
+fn @make_bool_i32(x: i32){
+    x != 0
+}
+
+
+

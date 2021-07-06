@@ -907,7 +907,6 @@ ArticTranspiler::emit_shaderinout_copy()
     source->add_source_with_indent("let dtime = inout.dtime;\n");
     source->add_source_with_indent("let dPdtime = inout.dPdtime;\n");
     source->add_source_with_indent("let mut Ci = inout.Ci;\n");
-    source->add_source_with_indent("let intrinsics = inout.intrinsics;\n");
 }
 void
 ArticTranspiler::emit_shaderinout_constructor()
@@ -927,7 +926,6 @@ ArticTranspiler::emit_shaderinout_constructor()
     source->add_source_with_indent("dtime = dtime,\n");
     source->add_source_with_indent("dPdtime = dPdtime,\n");
     source->add_source_with_indent("Ci = Ci,\n");
-    source->add_source_with_indent("intrinsics = intrinsics,\n");
     source->pop_indent();
     source->add_source_with_indent("}");
 }
