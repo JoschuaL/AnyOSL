@@ -54,8 +54,11 @@ surface mandelbrot (
     if (i < iters) {
         fout = i;
         float f = pow(float(i)/iters, 1/log10(float(iters)));
+	f = float(int(f * 5)) / 5;
         Cout = spline ("linear", f, colormap);
+	//Cout = color(f);
+	//if(f < 0.2){Cout = color(1,0,0);} else if(f < 0.7){Cout = color(0,1,0);} else {Cout = color(1,1,1);}
     } else {
-        Cout = 0;
+        Cout = color(0,0,0);
     }
 }

@@ -320,7 +320,7 @@ ArticTranspiler::transpile_shader_declaration(ASTshader_declaration* node)
     source->pop_indent();
     source->add_source_with_indent("}\n\n");
 
-    source->add_source_with_indent("fn make_", shadername, "_in() -> ",
+    source->add_source_with_indent("fn make_", shadername, "_in(inout: shader_inout) -> ",
                                    shadername, "_in {\n");
     source->push_indent();
     for (auto v : inputs) {
@@ -336,7 +336,7 @@ ArticTranspiler::transpile_shader_declaration(ASTshader_declaration* node)
         }
         source->add_source(";\n");
     }
-
+    emit_shaderinout_copy();
     source->add_source_with_indent(shadername, "_in{\n");
     source->push_indent();
     for (auto v : inputs) {
@@ -398,7 +398,11 @@ ArticTranspiler::transpile_statement_list(ASTNode::ref node)
                    != ASTNode::NodeType::conditional_statement_node) {
             source->add_source_with_indent("");
             dispatch_node(node);
-            source->add_source(";\n");
+            if(node->nodetype() != ASTNode::NodeType::return_statement_node){
+                source->add_source(";");
+            }
+            source->add_source("\n");
+
         } else {
             dispatch_node(node);
         }
@@ -415,6 +419,7 @@ ArticTranspiler::transpile_function_declaration(ASTfunction_declaration* node)
         auto formal_node = node->formals();
         while (formal_node) {
             source->add_source("_", get_artic_type_string(formal_node));
+            formal_node = formal_node->next();
         }
         source->add_source("__", get_artic_type_string(node), "(");
         formal_node = node->formals();
@@ -429,7 +434,7 @@ ArticTranspiler::transpile_function_declaration(ASTfunction_declaration* node)
             }
             formal_node = formal_node->next();
         }
-        source->add_source(", inout: shader_inout) ->",
+        source->add_source(" inout: shader_inout) ->",
                            get_artic_type_string(node), "{\n");
         source->push_indent();
         emit_shaderinout_copy();
@@ -613,8 +618,9 @@ ArticTranspiler::transpile_loopmod_statement(ASTloopmod_statement* node)
 void
 ArticTranspiler::transpile_return_statement(ASTreturn_statement* node)
 {
-    source->add_source("return ");
+    source->add_source("return(");
     dispatch_node(node->expr());
+    source->add_source(")");
 }
 void
 ArticTranspiler::transpile_binary_expression(ASTbinary_expression* node)
@@ -703,7 +709,7 @@ ArticTranspiler::transpile_typecast_expression(ASTtypecast_expression* node)
 void
 ArticTranspiler::transpile_type_constructor(ASTtype_constructor* node)
 {
-    if (node->typespec() == node->args()->typespec()
+    if ((node->typespec() == node->args()->typespec() || (node->typespec().is_triple() && node->args()->typespec().is_triple()))
         && !node->args()->next()) {  // copy-constructor
         dispatch_node(node->args());
         return;

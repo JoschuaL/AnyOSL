@@ -1,0 +1,48 @@
+float frac(float x){
+    return x - float(int(x));
+}
+
+point fractional_uv(float u_scale, float v_scale){
+    return point(frac(u_scale * u), frac(v_scale * v), 0);
+}
+
+
+
+color scaled_uv_circle_color(float u_scale, float v_scale, color outside_color)
+{
+    point uv = fractional_uv(u_scale, v_scale);
+    point center = point(0.5, 0.5, 0);
+    if (distance(uv, center) < 0.5) { 
+        return color(uv[0], uv[1], 0.0);
+    } else {
+        return outside_color;
+    }
+}
+
+vector round_bump_normal(float bump_scale, float u_scale, float v_scale, vector tangent_u, vector tangent_v)
+{
+    point uv = fractional_uv(u_scale, v_scale);
+    point center = point(0.5, 0.5, 0.0);
+    vector result;
+    if (distance(uv, center) <= 0.5) {
+        vector center_offset = uv - center;
+        vector new_tangent_u = tangent_u * center_offset[0];
+        vector new_tangent_v = tangent_v * center_offset[1];
+        vector tangent_sum = new_tangent_u + new_tangent_v;
+        vector scaled_tangent_sum = tangent_sum * bump_scale;
+        vector bent_normal = N + scaled_tangent_sum;
+        vector normalized = normalize(bent_normal);
+        result = normalized;
+    } else {
+        result = N; 
+    }
+    return result;
+}
+
+displacement circle_bump(
+    float bump_scale = 1,
+    float u_scale = 1,
+    float v_scale = 1
+){
+    N = round_bump_normal(bump_scale, u_scale, v_scale, dPdu, dPdv);
+}
