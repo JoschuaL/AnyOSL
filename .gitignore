@@ -11,3 +11,5 @@ build2
 *.log
 cmake-build-*
 *.oso
+.vscode
+.idea
