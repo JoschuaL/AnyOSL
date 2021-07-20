@@ -838,36 +838,16 @@ std::string
 ArticTranspiler::get_arg_name(TypeSpec typeSpec, int argnum)
 {
     if (typeSpec.is_triple()) {
-        switch (argnum) {
-        case 0: return "x";
-        case 1: return "y";
-        default: return "z";
-        }
+        OSL_ASSERT(0 <= argnum && argnum <= 2);
+        return std::string(1, "xyz"[argnum]);
     } else if (typeSpec.is_structure()) {
         auto structSpec = typeSpec.structspec();
         OSL_ASSERT(argnum < structSpec->numfields());
         auto fieldSpec = structSpec->field(static_cast<int>(argnum));
         return fieldSpec.name.string();
     } else if (typeSpec.is_matrix()) {
-        switch (argnum) {
-        case 0: return "m1_n1";
-        case 1: return "m1_n2";
-        case 2: return "m1_n3";
-        case 3: return "m1_n4";
-        case 4: return "m2_n1";
-        case 5: return "m2_n2";
-        case 6: return "m2_n3";
-        case 7: return "m2_n4";
-        case 8: return "m3_n1";
-        case 9: return "m3_n2";
-        case 10: return "m3_n3";
-        case 11: return "m3_n4";
-        case 12: return "m4_n1";
-        case 13: return "m4_n2";
-        case 14: return "m4_n3";
-        case 15: return "m4_n4";
-        default: NOT_IMPLEMENTED;
-        }
+        OSL_ASSERT(0 <= argnum && argnum <= 15);
+        return ("m" + std::to_string((argnum / 4) + 1) + "_n" + std::to_string((argnum % 4) + 1));
     } else if (typeSpec.is_float() || typeSpec.is_int()) {
         NOT_IMPLEMENTED;
     } else {
