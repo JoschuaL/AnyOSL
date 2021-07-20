@@ -465,10 +465,9 @@ OSLCompilerImpl::compile(string_view filename,
 
         if (m_generate_deps)
             write_dependency_file(filename);
-
+        ArticSource artic_source("  ");
         if (!error_encountered()) {
             if(m_compile_target == CompileTargets::ARTIC){
-                ArticSource artic_source("  ");
                 ArticTranspiler artic_transpiler(&artic_source, nullptr);
                 for(auto sym: this->symtab()){
                     if(sym->is_structure()){
@@ -482,16 +481,21 @@ OSLCompilerImpl::compile(string_view filename,
 
                 }
                 artic_transpiler.dispatch_node(shader());
-                artic_source.print();
+                if(m_debug){
+                    artic_source.print();
+                }
+
+            } else {
+                shader()->codegen();
+                track_variable_dependencies();
+                track_variable_lifetimes();
+                check_for_illegal_writes();
+                //            if (m_optimizelevel >= 1)
+                //                coalesce_temporaries ();
             }
 
 
-            shader()->codegen();
-            track_variable_dependencies();
-            track_variable_lifetimes();
-            check_for_illegal_writes();
-            //            if (m_optimizelevel >= 1)
-            //                coalesce_temporaries ();
+
         }
 
         if (!error_encountered()) {
@@ -507,9 +511,13 @@ OSLCompilerImpl::compile(string_view filename,
             }
             OSL_DASSERT(m_osofile == nullptr);
             m_osofile = &oso_output;
+            if(m_compile_target == CompileTargets::ARTIC){
+                write_artic_file(artic_source.get_code());
+            } else {
+                write_oso_file(OIIO::Strutil::join(options, " "),
+                               preprocess_result);
+            }
 
-            write_oso_file(OIIO::Strutil::join(options, " "),
-                           preprocess_result);
             OSL_DASSERT(m_osofile == nullptr);
 
             oso_output.close();
@@ -573,14 +581,34 @@ OSLCompilerImpl::compile_buffer(string_view sourcecode, std::string& osobuffer,
             if (shader())
                 shader()->print(std::cout);
         }
-
+        ArticSource artic_source("  ");
         if (!error_encountered()) {
-            shader()->codegen();
-            track_variable_dependencies();
-            track_variable_lifetimes();
-            check_for_illegal_writes();
-            //            if (m_optimizelevel >= 1)
-            //                coalesce_temporaries ();
+            if(m_compile_target == CompileTargets::ARTIC){
+                ArticTranspiler artic_transpiler(&artic_source, nullptr);
+                for(auto sym: this->symtab()){
+                    if(sym->is_structure()){
+                        artic_transpiler.generate_struct_definition(sym->typespec());
+                    } else if(sym->node() && sym->node()->nodetype() != ASTNode::NodeType::variable_declaration_node){
+                        auto node = sym->node();
+                        if(!node->is_std_node()){
+                            artic_transpiler.dispatch_node(node);
+                        }
+                    }
+
+                }
+                artic_transpiler.dispatch_node(shader());
+                if(m_debug){
+                    artic_source.print();
+                }
+            } else {
+                shader()->codegen();
+                track_variable_dependencies();
+                track_variable_lifetimes();
+                check_for_illegal_writes();
+                //            if (m_optimizelevel >= 1)
+                //                coalesce_temporaries ();
+            }
+
         }
 
         if (!error_encountered()) {
@@ -591,9 +619,13 @@ OSLCompilerImpl::compile_buffer(string_view sourcecode, std::string& osobuffer,
             oso_output.imbue(std::locale::classic());  // force C locale
             OSL_DASSERT(m_osofile == nullptr);
             m_osofile = &oso_output;
+            if(m_compile_target == CompileTargets::ARTIC){
+                write_artic_file(artic_source.get_code());
+            } else {
+                write_oso_file(OIIO::Strutil::join(options, " "),
+                               preprocess_result);
+            }
 
-            write_oso_file(OIIO::Strutil::join(options, " "),
-                           preprocess_result);
             osobuffer = oso_output.str();
             OSL_DASSERT(m_osofile == nullptr);
         }
@@ -857,7 +889,12 @@ OSLCompilerImpl::write_oso_symbol(const Symbol* sym)
     osof("\n");
 }
 
-
+void OSLCompilerImpl::write_artic_file(const std::string& code)
+{
+    OSL_DASSERT(m_osofile && m_osofile->good());
+    osof(code.c_str());
+    m_osofile = NULL;
+}
 
 void
 OSLCompilerImpl::write_oso_file(string_view options,

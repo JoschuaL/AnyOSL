@@ -387,6 +387,7 @@ private:
     std::string default_output_filename();
     void write_oso_file(string_view options,
                         string_view preprocessed_source = "");
+    void write_artic_file(const std::string& code);
     void write_oso_const_value(const ConstantSymbol* sym) const;
     void write_oso_symbol(const Symbol* sym);
     void write_oso_metadata(const ASTNode* metanode) const;
